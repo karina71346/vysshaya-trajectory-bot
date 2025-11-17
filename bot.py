@@ -1,1 +1,7 @@
-8558363661:AAFt7PbPowY8UqCvO-3eMPYgBu89RH1YCD4
+import logging
+import os
+
+from aiogram import Bot, Dispatcher, executor, types
+...
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
