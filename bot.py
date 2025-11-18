@@ -3,39 +3,37 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
-
-# === Настройки ===
-TOKEN = os.getenv("BOT_TOKEN")  # <--- проверь, как называется переменная на Render
-
-if not TOKEN:
-    raise RuntimeError("Не найден BOT_TOKEN в переменных окружения")
+from aiogram.filters import CommandStart, Command
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
+TOKEN = os.getenv("BOT_TOKEN")
+
+if not TOKEN:
+    raise RuntimeError("Не задан BOT_TOKEN (переменная окружения).")
+
+bot = Bot(TOKEN)          # БЕЗ parse_mode
 dp = Dispatcher()
 
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    text = (
-        "Привет! Я бот «Высшая Траектория».\n\n"
-        "Сейчас я в режиме MVP: главное — показать, что система жива ✅\n"
-        "Чуть позже добавим полную диагностику управленческой зрелости и все твои практики."
-    )
-    await message.answer(text)
+    await message.answer("Привет! Бот «Высшая траектория» на связи 🚀")
+
+
+@dp.message(Command("ping"))
+async def cmd_ping(message: types.Message):
+    await message.answer("pong")
 
 
 @dp.message()
-async def echo(message: types.Message):
-    # Временный обработчик: просто повторяем текст, чтобы видеть, что бот отвечает
+async def echo_any(message: types.Message):
+    # Чтобы точно видеть, что бот жив — будет повторять любое сообщение
     await message.answer(f"Ты написал(а): {message.text}")
 
 
 async def main():
-    bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
+    logging.info("Бот запущен и начинает polling…")
     await dp.start_polling(bot)
 
 
