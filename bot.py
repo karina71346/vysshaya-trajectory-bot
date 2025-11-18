@@ -83,19 +83,19 @@ def consent_kb() -> InlineKeyboardMarkup:
 
 
 def contact_phone_kb() -> ReplyKeyboardMarkup:
-    """Клавиатура для отправки контакта."""
-    kb = ReplyKeyboardMarkup(
+    """Клавиатура для отправки контакта (aiogram v3)."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="📲 Отправить мой номер",
+                    request_contact=True,
+                )
+            ]
+        ],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
-    kb.add(
-        KeyboardButton(
-            text="📲 Отправить мой номер",
-            request_contact=True,
-        )
-    )
-    return kb
-
 
 def channel_kb() -> InlineKeyboardMarkup:
     """Кнопки для перехода в канал и проверки подписки."""
