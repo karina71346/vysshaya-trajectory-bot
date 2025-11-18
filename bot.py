@@ -39,3 +39,15 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+def notebook_inline_kb():
+    """
+    Кнопка с переходом на интерактивную тетрадь лидера.
+    """
+    kb = InlineKeyboardMarkup()
+    kb.add(
+        InlineKeyboardButton(
+            text="🔷 Открыть тетрадь лидера",
+            url="https://tetrad-lidera.netlify.app/"
+        )
+    )
+    return kb
