@@ -104,6 +104,7 @@ async def cmd_start(message: types.Message):
         "🔹 После этого мы продолжим.\n\n"
         "▪️ Политика конфиденциальности\n"
         "▪️ Согласие на обработку персональных данных\n\n"
+        "Полный текст документов можно получить по запросу на email: carmen_84@inbox.ru\n\n"
         "🛡️ Нажимая кнопку «Далее», вы даёте согласие на обработку персональных данных\n"
         "и принимаете условия Политики конфиденциальности.\n\n"
         "👋 На связи Карина Конорева.\n"
@@ -219,3 +220,78 @@ async def handle_any_message(message: types.Message):
 
     # шаг ввода контактов (телефон + почта)
     if state == "await_contacts":
+        profile = user_profiles.get(user_id, {})
+
+        parts = []
+        if message.contact:
+            parts.append(f"Телефон (contact): {message.contact.phone_number}")
+        if message.text:
+            parts.append(f"Текст: {message.text}")
+
+        contacts_str = " | ".join(parts) if parts else "(нет данных)"
+        profile["contacts"] = contacts_str
+        user_profiles[user_id] = profile
+
+        logging.info(f"Контакты лидера: {user_id} -> {contacts_str!r}")
+
+        user_states[user_id] = "done"
+
+        await message.answer(
+            "Благодарю! Теперь мы с вами на связи 🤝\n\n"
+            "Совсем скоро вы сможете увидеть уровень своего лидерства через делегирование.\n\n"
+            "А сейчас — ваша интерактивная «Тетрадь лидера по делегированию».\n"
+            "Заполняйте онлайн и забирайте отчёт в PDF или Word.\n\n"
+            "Также можете присоединиться к каналу проекта:\n"
+            "https://t.me/businesskodrosta",
+            reply_markup=ReplyKeyboardRemove()
+        )
+
+        # выдаём кнопку с тетрадью
+        await message.answer(
+            "Нажмите кнопку ниже, чтобы открыть тетрадь в браузере:",
+            reply_markup=notebook_inline_kb()
+        )
+        return
+
+    # команда «стоп» — условный отзыв согласия
+    if message.text and message.text.strip().lower() in ("стоп", "stop"):
+        user_states[user_id] = "no_consent"
+        await message.answer(
+            "Хорошо, я остановлю взаимодействие и не буду дальше обрабатывать данные.\n"
+            "Если передумаешь — всегда можно начать заново через /start."
+        )
+        return
+
+    # обычный режим: простое эхо, чтобы видеть, что бот жив
+    await message.answer(f"Ты написал(а): {message.text}")
+
+
+# ---------- мини-веб-сервер для Render (порт для Web Service) ----------
+
+async def handle_root(request: web.Request) -> web.Response:
+    return web.Response(text="Vysshaya Traektoria bot is running")
+
+
+async def start_web_app():
+    app = web.Application()
+    app.router.add_get("/", handle_root)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+    await site.start()
+
+    logging.info(f"HTTP server started on port {PORT}")
+
+
+async def main():
+    logging.info("Запуск бота и HTTP-сервера…")
+    # 1) запускаем веб-сервер (порт для Render)
+    await start_web_app()
+    # 2) запускаем long polling бота
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
