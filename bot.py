@@ -11,7 +11,6 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardRemove,
-    FSInputFile,
 )
 from aiohttp import web  # мини HTTP-сервер для Render
 
@@ -21,10 +20,10 @@ TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN (переменная окружения).")
 
-# PORT нужен именно для Render Web Service
+# PORT нужен для Render Web Service
 PORT = int(os.getenv("PORT", "10000"))
 
-bot = Bot(TOKEN)   # без parse_mode, шлём простой текст
+bot = Bot(TOKEN)   # без parse_mode
 dp = Dispatcher()
 
 # состояния: user_id -> str
@@ -34,15 +33,9 @@ user_profiles: dict[int, dict] = {}   # имя, телефон, почта
 
 CHANNEL_USERNAME = "@businesskodrosta"  # канал для проверки подписки
 
-# PDF-файлы лежат в КОРНЕ репозитория
-POLICY_FILE_PATH = "politika_konfidencialnosti.pdf"
-CONSENT_FILE_PATH = "soglasie_na_obrabotku_pd.pdf"
-
 
 def notebook_inline_kb() -> InlineKeyboardMarkup:
-    """
-    Кнопка с переходом на интерактивную тетрадь лидера.
-    """
+    """Кнопка с переходом на интерактивную тетрадь лидера."""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -57,11 +50,21 @@ def notebook_inline_kb() -> InlineKeyboardMarkup:
 
 
 def consent_kb() -> InlineKeyboardMarkup:
-    """
-    Кнопки согласия на обработку персональных данных.
-    """
+    """Кнопки ПДн + согласие/отказ."""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📄 Политика конфиденциальности",
+                    url="https://github.com/karina71346/vysshaya-trajectory-bot/raw/main/politika_konfidencialnosti.pdf",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📄 Согласие на обработку ПДн",
+                    url="https://github.com/karina71346/vysshaya-trajectory-bot/raw/main/soglasie_na_obrabotku_pd.pdf",
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text="Далее",
@@ -80,9 +83,7 @@ def consent_kb() -> InlineKeyboardMarkup:
 
 
 def contact_phone_kb() -> ReplyKeyboardMarkup:
-    """
-    Клавиатура для отправки контакта.
-    """
+    """Клавиатура для отправки контакта."""
     kb = ReplyKeyboardMarkup(
         resize_keyboard=True,
         one_time_keyboard=True,
@@ -97,9 +98,7 @@ def contact_phone_kb() -> ReplyKeyboardMarkup:
 
 
 def channel_kb() -> InlineKeyboardMarkup:
-    """
-    Кнопки для перехода в канал и проверки подписки.
-    """
+    """Кнопки для перехода в канал и проверки подписки."""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -121,9 +120,7 @@ def channel_kb() -> InlineKeyboardMarkup:
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    """
-    Шаг 1: приветствие + ПДн + кнопка «Далее» и отправка PDF.
-    """
+    """Шаг 1: приветствие + ПДн + кнопка «Далее»."""
     user_id = message.from_user.id
     user_states[user_id] = "await_consent"
 
@@ -132,34 +129,19 @@ async def cmd_start(message: types.Message):
         "Перед тем как получить интерактивную тетрадь лидера, нужно совсем чуть-чуть формальностей:\n"
         "🔹 Подтвердите, что вы согласны на обработку персональных данных (обязательное требование).\n"
         "🔹 После этого мы продолжим.\n\n"
-        "▪️ Политика конфиденциальности\n"
-        "▪️ Согласие на обработку персональных данных\n\n"
+        "Если нужно, вы можете открыть и сохранить документы:\n"
+        "— Политика конфиденциальности\n"
+        "— Согласие на обработку персональных данных\n\n"
         "🛡️ Нажимая кнопку «Далее», вы даёте согласие на обработку персональных данных\n"
         "и принимаете условия Политики конфиденциальности."
     )
 
-    # сообщение с текстом и кнопкой «Далее»
     await message.answer(text, reply_markup=consent_kb())
-
-    # сразу прикрепляем два документа PDF
-    try:
-        policy = FSInputFile(POLICY_FILE_PATH)
-        await message.answer_document(policy, caption="Политика конфиденциальности")
-    except Exception as e:
-        logging.warning(f"Не удалось отправить Политику конфиденциальности: {e}")
-
-    try:
-        consent_doc = FSInputFile(CONSENT_FILE_PATH)
-        await message.answer_document(consent_doc, caption="Согласие на обработку персональных данных")
-    except Exception as e:
-        logging.warning(f"Не удалось отправить Согласие на обработку ПДн: {e}")
 
 
 @dp.callback_query(F.data == "consent_yes")
 async def consent_yes(callback: CallbackQuery):
-    """
-    Пользователь дал согласие — Шаг 2: знакомство (имя).
-    """
+    """Пользователь дал согласие — Шаг 2: имя."""
     user_id = callback.from_user.id
     user_states[user_id] = "await_name"
 
@@ -178,9 +160,7 @@ async def consent_yes(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "consent_no")
 async def consent_no(callback: CallbackQuery):
-    """
-    Нет согласия — стоп.
-    """
+    """Нет согласия — стоп."""
     user_id = callback.from_user.id
     user_states[user_id] = "no_consent"
 
@@ -199,9 +179,7 @@ async def consent_no(callback: CallbackQuery):
 
 @dp.message(Command("notebook"))
 async def cmd_notebook(message: types.Message):
-    """
-    /notebook — на всякий случай, выдаём только тем, кто прошёл все шаги.
-    """
+    """/notebook — выдаём только тем, кто прошёл все шаги."""
     user_id = message.from_user.id
     state = user_states.get(user_id)
 
@@ -217,9 +195,7 @@ async def cmd_notebook(message: types.Message):
 
 
 async def send_notebook(chat_id: int):
-    """
-    Отправка сообщения с кнопкой тетради.
-    """
+    """Сообщение с кнопкой тетради."""
     text = (
         "📘 Тетрадь лидера по делегированию.\n\n"
         "Откроется в браузере: можно заполнять онлайн и сохранять отчёт."
@@ -229,9 +205,7 @@ async def send_notebook(chat_id: int):
 
 @dp.message()
 async def handle_any_message(message: types.Message):
-    """
-    Общий диалог: имя -> телефон -> почта -> канал.
-    """
+    """Диалог: имя -> телефон -> почта -> канал."""
     user_id = message.from_user.id
     state = user_states.get(user_id)
 
@@ -299,8 +273,8 @@ async def handle_any_message(message: types.Message):
         await message.answer(
             "Благодарю! Теперь мы с вами на связи 🤝\n\n"
             "Совсем скоро вы сможете узнать уровень своего лидерства через делегирование.\n\n"
-            "Что нужно будет сделать дальше:\n"
-            "— вступить в канал проекта «Бизнес со смыслом»:\n"
+            "Что дальше:\n"
+            "— вступите в канал проекта «Бизнес со смыслом»:\n"
             "https://t.me/businesskodrosta\n\n"
             "После вступления вернитесь сюда и нажмите «Я вступил(а) в канал».",
             reply_markup=channel_kb()
@@ -316,16 +290,14 @@ async def handle_any_message(message: types.Message):
         )
         return
 
-    # Остальное — простое эхо
+    # Остальное — простое эхо (чтобы бот не молчал вовсе)
     if message.text:
         await message.answer(f"Ты написал(а): {message.text}")
 
 
 @dp.callback_query(F.data == "check_channel")
 async def check_channel(callback: CallbackQuery):
-    """
-    Проверяем, вступил ли пользователь в канал.
-    """
+    """Проверяем, вступил ли пользователь в канал."""
     user_id = callback.from_user.id
     state = user_states.get(user_id)
 
