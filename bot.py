@@ -30,13 +30,13 @@ dp = Dispatcher()
 # состояния: user_id -> str
 # "await_consent" / "await_name" / "await_phone" / "await_email" / "await_channel" / "ready" / "no_consent"
 user_states: dict[int, str] = {}
-user_profiles: dict[int, dict] = {}   # здесь складываем имя/роль и контакты
+user_profiles: dict[int, dict] = {}   # имя, телефон, почта
 
 CHANNEL_USERNAME = "@businesskodrosta"  # канал для проверки подписки
 
-# Пути к PDF-документам (файлы должны лежать в папке docs репозитория)
-POLICY_FILE_PATH = "docs/politika_konfidencialnosti.pdf"
-CONSENT_FILE_PATH = "docs/soglasie_na_obrabotku_pd.pdf"
+# PDF-файлы лежат в КОРНЕ репозитория
+POLICY_FILE_PATH = "politika_konfidencialnosti.pdf"
+CONSENT_FILE_PATH = "soglasie_na_obrabotku_pd.pdf"
 
 
 def notebook_inline_kb() -> InlineKeyboardMarkup:
@@ -122,7 +122,7 @@ def channel_kb() -> InlineKeyboardMarkup:
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     """
-    1-й шаг: приветствие + ПДн + кнопка «Далее» + отправка PDF.
+    Шаг 1: приветствие + ПДн + кнопка «Далее» и отправка PDF.
     """
     user_id = message.from_user.id
     user_states[user_id] = "await_consent"
@@ -138,10 +138,10 @@ async def cmd_start(message: types.Message):
         "и принимаете условия Политики конфиденциальности."
     )
 
-    # 1 смс с кнопкой
+    # сообщение с текстом и кнопкой «Далее»
     await message.answer(text, reply_markup=consent_kb())
 
-    # Следом — прикрепляем два документа
+    # сразу прикрепляем два документа PDF
     try:
         policy = FSInputFile(POLICY_FILE_PATH)
         await message.answer_document(policy, caption="Политика конфиденциальности")
@@ -158,7 +158,7 @@ async def cmd_start(message: types.Message):
 @dp.callback_query(F.data == "consent_yes")
 async def consent_yes(callback: CallbackQuery):
     """
-    Пользователь дал согласие — 2-й шаг: знакомство (имя).
+    Пользователь дал согласие — Шаг 2: знакомство (имя).
     """
     user_id = callback.from_user.id
     user_states[user_id] = "await_name"
@@ -172,14 +172,14 @@ async def consent_yes(callback: CallbackQuery):
     await callback.message.answer(
         "Отлично!\n"
         "Давайте начнём знакомство.\n\n"
-        "Напишите, пожалуйста, как к вам обращаться (имя или ФИО)."
+        "Напишите, как к вам обращаться — имя или ФИ."
     )
 
 
 @dp.callback_query(F.data == "consent_no")
 async def consent_no(callback: CallbackQuery):
     """
-    Нет согласия — всё останавливаем.
+    Нет согласия — стоп.
     """
     user_id = callback.from_user.id
     user_states[user_id] = "no_consent"
@@ -193,7 +193,7 @@ async def consent_no(callback: CallbackQuery):
     await callback.message.answer(
         "Понимаю, спасибо за честность.\n\n"
         "Я не буду сохранять и обрабатывать ваши данные и не выдам тетрадь.\n"
-        "Если захотите вернуться к материалам — просто напишите /start."
+        "Если захотите вернуться к материалам — напишите /start."
     )
 
 
@@ -235,7 +235,7 @@ async def handle_any_message(message: types.Message):
     user_id = message.from_user.id
     state = user_states.get(user_id)
 
-    # 2-й шаг: имя
+    # Шаг 2: имя
     if state == "await_name":
         profile = user_profiles.get(user_id, {})
         profile["name"] = (message.text or "").strip()
@@ -254,7 +254,7 @@ async def handle_any_message(message: types.Message):
         )
         return
 
-    # 3-й шаг: телефон
+    # Шаг 3: телефон
     if state == "await_phone":
         profile = user_profiles.get(user_id, {})
 
@@ -285,7 +285,7 @@ async def handle_any_message(message: types.Message):
         )
         return
 
-    # 4-й шаг: почта
+    # Шаг 4: почта
     if state == "await_email":
         profile = user_profiles.get(user_id, {})
         email = (message.text or "").strip()
@@ -300,7 +300,7 @@ async def handle_any_message(message: types.Message):
             "Благодарю! Теперь мы с вами на связи 🤝\n\n"
             "Совсем скоро вы сможете узнать уровень своего лидерства через делегирование.\n\n"
             "Что нужно будет сделать дальше:\n"
-            "Вступить в канал проекта «Бизнес со смыслом»:\n"
+            "— вступить в канал проекта «Бизнес со смыслом»:\n"
             "https://t.me/businesskodrosta\n\n"
             "После вступления вернитесь сюда и нажмите «Я вступил(а) в канал».",
             reply_markup=channel_kb()
@@ -316,8 +316,9 @@ async def handle_any_message(message: types.Message):
         )
         return
 
-    # Остальное — просто эхо, чтобы было видно, что бот жив
-    await message.answer(f"Ты написал(а): {message.text}")
+    # Остальное — простое эхо
+    if message.text:
+        await message.answer(f"Ты написал(а): {message.text}")
 
 
 @dp.callback_query(F.data == "check_channel")
@@ -350,7 +351,7 @@ async def check_channel(callback: CallbackQuery):
         await callback.message.answer(
             "Отлично! Я вижу, что вы в канале «Бизнес со смыслом» 🌟\n\n"
             "Рада видеть вас в пространстве «Высшая Траектория».\n"
-            "Давайте переходить к работе с тетрадью лидера."
+            "Теперь можно переходить к тетради лидера."
         )
 
         await send_notebook(callback.message.chat.id)
@@ -384,9 +385,7 @@ async def start_web_app():
 
 async def main():
     logging.info("Запуск бота и HTTP-сервера…")
-    # 1) запускаем веб-сервер (порт для Render)
     await start_web_app()
-    # 2) запускаем long polling бота
     await dp.start_polling(bot)
 
 
