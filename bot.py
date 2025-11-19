@@ -5,7 +5,7 @@ import logging
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import (
@@ -13,32 +13,27 @@ from aiogram.types import (
     InlineKeyboardButton,
     ReplyKeyboardMarkup,
     KeyboardButton,
+    ReplyKeyboardRemove,
 )
 from aiogram.enums import ChatMemberStatus
 
+
 logging.basicConfig(level=logging.INFO)
 
-# =====================================================================
-# НАСТРОЙКИ (меняешь только эти значения, остальное не трогаешь)
-# =====================================================================
+# ===== НАСТРОЙКИ ======================================================
 
-TOKEN = os.getenv("BOT_TOKEN")  # на Render уже задан, тут ничего не правим
+TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из Render
 
-# Юзернейм твоего канала (где проверяем подписку)
-CHANNEL_USERNAME = "@businesskodrosta"
+CHANNEL_USERNAME = "@businesskodrosta"  # твой канал
 
-# Ссылка на интерактивную тетрадь по делегированию
-# 👉 ПОДСТАВЬ сюда реальный адрес своей тетради
+# СЮДА вставь ссылку на интерактивную тетрадь
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
 
-# Ссылка для записи на консультацию
-# 👉 ПОДСТАВЬ сюда свой рабочий линк (личный TG, лендинг, форма и т.п.)
+# Форма на консультацию (ты просила именно эту)
 CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
-# База для прямых ссылок на PDF в GitHub (raw, а не HTML-страница)
-GITHUB_RAW_BASE = (
-    "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory-bot/main"
-)
+# База для ПРЯМЫХ PDF-ссылок (raw, а не страница GitHub)
+GITHUB_BASE = "https://github.com/karina71346/vysshaya-trajectory-bot/raw/main"
 
 # =====================================================================
 
@@ -49,23 +44,22 @@ bot = Bot(token=TOKEN, parse_mode="HTML")
 dp = Dispatcher()
 
 
-# ------------------------- FSM Состояния -------------------------------
-
 class Form(StatesGroup):
     waiting_name = State()
     waiting_phone = State()
     waiting_email = State()
 
 
-# --------------------------- Клавиатуры --------------------------------
+# ---------- КЛАВИАТУРЫ -----------------------------------------------
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
+    """Главное меню."""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📁 Папка лидера")],
             [
                 KeyboardButton(text="ℹ️ О Карине"),
-                KeyboardButton(text="🧭 Записаться на консультацию/сессию"),
+                KeyboardButton(text="🧭 Записаться на консультацию"),
             ],
         ],
         resize_keyboard=True,
@@ -73,18 +67,19 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
 
 
 def consent_kb() -> InlineKeyboardMarkup:
+    """Кнопки под блоком согласия на ПДн."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="📄 Политика конфиденциальности",
-                    url=f"{GITHUB_RAW_BASE}/politika_konfidencialnosti.pdf",
+                    url=f"{GITHUB_BASE}/politika_konfidencialnosti.pdf",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="📄 Согласие на обработку персональных данных",
-                    url=f"{GITHUB_RAW_BASE}/soglasie_na_obrabotku_pd.pdf",
+                    url=f"{GITHUB_BASE}/soglasie_na_obrabotku_pd.pdf",
                 )
             ],
             [InlineKeyboardButton(text="Далее", callback_data="consent_continue")],
@@ -93,6 +88,7 @@ def consent_kb() -> InlineKeyboardMarkup:
 
 
 def leader_pack_kb() -> InlineKeyboardMarkup:
+    """Кнопки под Папкой лидера."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -104,20 +100,30 @@ def leader_pack_kb() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="📗 Гайд «Карта управленческой зрелости»",
-                    url=f"{GITHUB_RAW_BASE}/karta_upravlencheskoy_zrelosti.pdf",
+                    url=f"{GITHUB_BASE}/karta_upravlencheskoy_zrelosti.pdf",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="📙 Чек-лист зрелого лидера",
-                    url=f"{GITHUB_RAW_BASE}/checklist_zrelogo_lidera.pdf",
+                    url=f"{GITHUB_BASE}/checklist_zrelogo_lidera.pdf",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="📚 Подборка книг для лидеров",
-                    url=f"{GITHUB_RAW_BASE}/podborca_knig_liderstvo.pdf",
+                    url=f"{GITHUB_BASE}/podborca_knig_liderstvo.pdf",
                 )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="ℹ️ О Карине",
+                    callback_data="about_me_cb",
+                ),
+                InlineKeyboardButton(
+                    text="🧭 Консультация",
+                    callback_data="consult_cb",
+                ),
             ],
             [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_menu")],
         ]
@@ -125,6 +131,7 @@ def leader_pack_kb() -> InlineKeyboardMarkup:
 
 
 def consult_kb() -> InlineKeyboardMarkup:
+    """Кнопка на заявку плюс возврат в меню."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Оставить заявку", url=CONSULT_LINK)],
@@ -133,8 +140,7 @@ def consult_kb() -> InlineKeyboardMarkup:
     )
 
 
-# --------------------------- Хендлеры ----------------------------------
-
+# ---------- СТАРТ И СБОР ДАННЫХ --------------------------------------
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -148,15 +154,13 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer(text, reply_markup=consent_kb())
 
 
-# --- после согласия — собираем данные ---
-
 @dp.callback_query(F.data == "consent_continue")
 async def consent_continue(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.answer(
         "Отлично! Давайте начнём знакомство.\n\n"
         "Напишите, пожалуйста, как к вам обращаться — ФИ.",
-        reply_markup=types.ReplyKeyboardRemove(),
+        reply_markup=ReplyKeyboardRemove(),
     )
     await state.set_state(Form.waiting_name)
 
@@ -194,7 +198,7 @@ async def process_phone_text(message: types.Message, state: FSMContext):
 async def ask_email(message: types.Message, state: FSMContext):
     await message.answer(
         "Теперь напишите, пожалуйста, вашу почту.",
-        reply_markup=types.ReplyKeyboardRemove(),
+        reply_markup=ReplyKeyboardRemove(),
     )
     await state.set_state(Form.waiting_email)
 
@@ -227,7 +231,7 @@ async def process_email(message: types.Message, state: FSMContext):
     )
 
 
-# --- проверка подписки на канал ---
+# ---------- ПРОВЕРКА ПОДПИСКИ ----------------------------------------
 
 @dp.callback_query(F.data == "check_sub")
 async def check_subscription(callback: types.CallbackQuery):
@@ -250,7 +254,6 @@ async def check_subscription(callback: types.CallbackQuery):
         ChatMemberStatus.CREATOR,
         ChatMemberStatus.RESTRICTED,
     }:
-        # всё ок, человек в канале
         await callback.message.answer(
             "Отлично, я вижу вас в канале 👌\n"
             "Отправляю Папку лидера и главное меню.",
@@ -266,7 +269,7 @@ async def check_subscription(callback: types.CallbackQuery):
         )
 
 
-# --- папка лидера ---
+# ---------- ПАПКА ЛИДЕРА ---------------------------------------------
 
 async def send_leader_pack(message: types.Message):
     text = (
@@ -284,21 +287,20 @@ async def send_leader_pack(message: types.Message):
     await message.answer(text, reply_markup=leader_pack_kb())
 
 
+@dp.message(F.text == "📁 Папка лидера")
+async def menu_leader_pack(message: types.Message):
+    await send_leader_pack(message)
+
+
 @dp.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer("Вы в главном меню.", reply_markup=main_menu_kb())
 
 
-@dp.message(F.text == "📁 Папка лидера")
-async def menu_leader_pack(message: types.Message):
-    await send_leader_pack(message)
+# ---------- БЛОК «О КАРИНЕ» ------------------------------------------
 
-
-# --- раздел «Обо мне» ---
-
-@dp.message(F.text == "ℹ️ Обо мне")
-async def about_me(message: types.Message):
+async def send_about_me(message: types.Message):
     text = (
         "ℹ️ <b>Информация о Карине Коноревой</b>\n\n"
         "• Бизнес-психолог, ментор управленческой зрелости и командный коуч.\n"
@@ -312,10 +314,20 @@ async def about_me(message: types.Message):
     await message.answer(text, reply_markup=main_menu_kb())
 
 
-# --- запись на консультацию ---
+@dp.message(F.text == "ℹ️ Обо мне")
+async def about_me(message: types.Message):
+    await send_about_me(message)
 
-@dp.message(F.text == "🧭 Записаться на консультацию")
-async def consult(message: types.Message):
+
+@dp.callback_query(F.data == "about_me_cb")
+async def cb_about_me(callback: types.CallbackQuery):
+    await callback.answer()
+    await send_about_me(callback.message)
+
+
+# ---------- КОНСУЛЬТАЦИЯ ---------------------------------------------
+
+async def send_consult(message: types.Message):
     text = (
         "🧭 <b>Записаться на консультацию</b>\n\n"
         "Если вы хотите разобраться с управленческой нагрузкой, командой или стратегией роста —\n"
@@ -325,11 +337,21 @@ async def consult(message: types.Message):
     await message.answer(text, reply_markup=consult_kb())
 
 
-# ---------------------- Инфраструктура для Render ---------------------
+@dp.message(F.text == "🧭 Записаться на консультацию")
+async def consult(message: types.Message):
+    await send_consult(message)
 
+
+@dp.callback_query(F.data == "consult_cb")
+async def cb_consult(callback: types.CallbackQuery):
+    await callback.answer()
+    await send_consult(callback.message)
+
+
+# ---------- СЕРВЕР ДЛЯ RENDER ----------------------------------------
 
 async def on_startup(app: web.Application):
-    # запускаем long polling внутри aiohttp-приложения
+    # запуск aiogram-поллинга внутри aiohttp-приложения
     asyncio.create_task(dp.start_polling(bot))
 
 
