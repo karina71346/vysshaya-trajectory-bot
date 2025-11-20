@@ -14,7 +14,6 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardRemove,
-    URLInputFile,
 )
 from aiogram.enums import ChatMemberStatus
 
@@ -307,9 +306,8 @@ async def back_to_menu(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "lp_guide")
 async def send_guide(callback: types.CallbackQuery):
     await callback.answer()
-    file = URLInputFile(f"{GITHUB_BASE}/karta_upravlencheskoy_zrelosti.pdf")
     await callback.message.answer_document(
-        document=file,
+        document=f"{GITHUB_BASE}/karta_upravlencheskoy_zrelosti.pdf",
         caption="Гайд «Карта управленческой зрелости»",
     )
 
@@ -317,9 +315,8 @@ async def send_guide(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "lp_checklist")
 async def send_checklist(callback: types.CallbackQuery):
     await callback.answer()
-    file = URLInputFile(f"{GITHUB_BASE}/checklist_zrelogo_lidera.pdf")
     await callback.message.answer_document(
-        document=file,
+        document=f"{GITHUB_BASE}/checklist_zrelogo_lidera.pdf",
         caption="Чек-лист зрелого лидера",
     )
 
@@ -327,9 +324,8 @@ async def send_checklist(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "lp_books")
 async def send_books(callback: types.CallbackQuery):
     await callback.answer()
-    file = URLInputFile(f"{GITHUB_BASE}/podborca_knig_liderstvo.pdf")
     await callback.message.answer_document(
-        document=file,
+        document=f"{GITHUB_BASE}/podborca_knig_liderstvo.pdf",
         caption="Подборка книг для современных лидеров",
     )
 
