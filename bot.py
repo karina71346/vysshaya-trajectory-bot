@@ -73,13 +73,13 @@ def consent_kb() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="📄 Политика конфиденциальности",
-                    url=f"{GITHUB_BASE}/politika_konfidencialnosti.pdf",
+                    url=sandbox:/mnt/data/politika_konfidencialnosti.pdf",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="📄 Согласие на обработку персональных данных",
-                    url=f"{GITHUB_BASE}/soglasie_na_obrabotku_pd.pdf",
+                    url=sandbox:/mnt/data/soglasie_na_obrabotku_pd.pdf",
                 )
             ],
             [InlineKeyboardButton(text="Далее", callback_data="consent_continue")],
@@ -307,7 +307,7 @@ async def back_to_menu(callback: types.CallbackQuery):
 async def send_guide(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer_document(
-        document=f"{GITHUB_BASE}/karta_upravlencheskoy_zrelosti.pdf",
+        document="sandbox:/mnt/data/karta_upravlencheskoy_zrelosti.pdf",
         caption="Гайд «Карта управленческой зрелости»",
     )
 
@@ -316,7 +316,7 @@ async def send_guide(callback: types.CallbackQuery):
 async def send_checklist(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer_document(
-        document=f"{GITHUB_BASE}/checklist_zrelogo_lidera.pdf",
+        document=sandbox:/mnt/data/checklist_zrelogo_lidera.pdf",
         caption="Чек-лист зрелого лидера",
     )
 
@@ -325,7 +325,7 @@ async def send_checklist(callback: types.CallbackQuery):
 async def send_books(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer_document(
-        document=f"{GITHUB_BASE}/podborca_knig_liderstvo.pdf",
+        document=sandbox:/mnt/data/podborca_knig_liderstvo.pdf",
         caption="Подборка книг для современных лидеров",
     )
 
