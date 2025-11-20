@@ -5,6 +5,7 @@ import logging
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
+from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -40,7 +41,9 @@ GITHUB_BASE = "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory
 if not TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
 
-bot = Bot(token=TOKEN, parse_mode="HTML")
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode="HTML"),
 dp = Dispatcher()
 
 
