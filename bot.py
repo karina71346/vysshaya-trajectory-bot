@@ -5,6 +5,8 @@ import logging
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ChatMemberStatus, ParseMode
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -15,15 +17,12 @@ from aiogram.types import (
     KeyboardButton,
     ReplyKeyboardRemove,
 )
-from aiogram.enums import ChatMemberStatus
-from aiogram.client.default import DefaultBotProperties
-
 
 logging.basicConfig(level=logging.INFO)
 
 # ===== НАСТРОЙКИ ======================================================
 
-TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из Render
+TOKEN = os.getenv("BOT_TOKEN")  # токен бота из переменных окружения
 
 CHANNEL_USERNAME = "@businesskodrosta"  # твой канал
 
@@ -41,8 +40,8 @@ GITHUB_BASE = "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory
 if not TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
 
-# ВАЖНО: для aiogram 3.7+ parse_mode задаём через DefaultBotProperties
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+# В aiogram 3.13 parse_mode задаётся через DefaultBotProperties
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 
@@ -232,11 +231,15 @@ async def process_email(message: types.Message, state: FSMContext):
         reply_markup=join_kb,
     )
 
+    # Ключевая правка: после e-mail выходим из состояния,
+    # чтобы дальше работали кнопки «Папка лидера», «О Карине» и т.д.
+    await state.clear()
+
 
 # ---------- ПРОВЕРКА ПОДПИСКИ ----------------------------------------
 
 @dp.callback_query(F.data == "check_sub")
-async def check_subscription(callback: types.CallbackQuery):
+async def check_subscription(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
 
     try:
@@ -256,9 +259,12 @@ async def check_subscription(callback: types.CallbackQuery):
         ChatMemberStatus.CREATOR,
         ChatMemberStatus.RESTRICTED,
     }:
+        # На всякий случай тоже чистим состояние
+        await state.clear()
+
         await callback.message.answer(
             "Отлично, я вижу вас в канале 👌\n"
-            "Отправляю Папку лидера и главное меню.",
+            "Отправляю Папку лидера.",
         )
         await send_leader_pack(callback.message)
         await callback.message.answer(
