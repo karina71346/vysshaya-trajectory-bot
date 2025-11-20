@@ -5,7 +5,6 @@ import logging
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -17,6 +16,7 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 from aiogram.enums import ChatMemberStatus
+from aiogram.client.default import DefaultBotProperties
 
 
 logging.basicConfig(level=logging.INFO)
@@ -41,9 +41,8 @@ GITHUB_BASE = "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory
 if not TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
 
-bot = Bot(
-    token=TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML"),
+# ВАЖНО: для aiogram 3.7+ parse_mode задаём через DefaultBotProperties
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
 
 
