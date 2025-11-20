@@ -56,7 +56,7 @@ class Form(StatesGroup):
 # ---------- КЛАВИАТУРЫ -----------------------------------------------
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
-    """Главное меню."""
+    """Главное меню (появляется только ПОСЛЕ Папки лидера)."""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📁 Папка лидера")],
@@ -147,9 +147,11 @@ def consult_kb() -> InlineKeyboardMarkup:
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    # Чистим состояние и убираем старое меню, если оно висело
+    """Старт: убираем старое меню и показываем только блок согласия."""
     await state.clear()
-    await message.answer("Запускаю бота заново 🔄", reply_markup=ReplyKeyboardRemove())
+
+    # Прячем старую клавиатуру (чтобы меню не торчало заранее)
+    await message.answer("Запускаю бота 🔄", reply_markup=ReplyKeyboardRemove())
 
     text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
@@ -209,14 +211,17 @@ async def ask_email(message: types.Message, state: FSMContext):
     await state.set_state(Form.waiting_email)
 
 
-@dp.message(Form.waiting_email)
+@dp.message(Form.waiting_email, F.text)
 async def process_email(message: types.Message, state: FSMContext):
+    """После почты отправляем кнопки для входа в канал."""
+    logging.info("EMAIL FROM USER: %s", message.text)
     await state.update_data(email=message.text.strip())
 
     await message.answer(
         "Благодарю! Теперь мы с вами на связи.\n\n"
         "Чтобы получить материалы, нужно вступить в канал "
         "«Бизнес со смыслом» и подтвердить участие.",
+        reply_markup=ReplyKeyboardRemove(),
     )
 
     join_kb = InlineKeyboardMarkup(
@@ -260,9 +265,9 @@ async def check_subscription(callback: types.CallbackQuery):
         ChatMemberStatus.CREATOR,
         ChatMemberStatus.RESTRICTED,
     }:
-        # Сначала отправляем Папку лидера
+        # 1) Сначала выдаём Папку лидера
         await send_leader_pack(callback.message)
-        # Потом показываем главное меню
+        # 2) Потом показываем меню
         await callback.message.answer(
             "Вы в главном меню. Выберите нужный раздел 👇",
             reply_markup=main_menu_kb(),
@@ -305,7 +310,7 @@ async def back_to_menu(callback: types.CallbackQuery):
     await callback.message.answer("Вы в главном меню.", reply_markup=main_menu_kb())
 
 
-# --- отправка самих PDF как файлов по клику в Папке лидера -----------
+# --- отправка PDF как файлов по клику в Папке лидера -----------------
 
 @dp.callback_query(F.data == "lp_guide")
 async def send_guide(callback: types.CallbackQuery):
@@ -338,7 +343,7 @@ async def send_books(callback: types.CallbackQuery):
 
 async def send_about_me(message: types.Message):
     text = (
-        "ℹ️ <b>Информация о Карине Коноревой</b>\n\n"
+        "ℹ️ <b>О Карине Коноревой</b>\n\n"
         "• Бизнес-психолог, ментор управленческой зрелости и командный коуч.\n"
         "• 20+ лет пути от преподавателя до предпринимателя.\n"
         "• Основатель проекта «Высшая Траектория».\n"
@@ -387,13 +392,12 @@ async def cb_consult(callback: types.CallbackQuery):
 # ---------- СЕРВЕР ДЛЯ RENDER ----------------------------------------
 
 async def on_startup(app: web.Application):
-    # Убираем вебхук, если он где-то был настроен (иначе конфликт getUpdates)
+    # На всякий случай убираем вебхук (чтобы не было конфликта с getUpdates)
     try:
         await bot.delete_webhook(drop_pending_updates=True)
     except Exception as e:
         logging.warning("Не удалось удалить webhook: %s", e)
 
-    # Запускаем поллинг
     asyncio.create_task(dp.start_polling(bot))
 
 
