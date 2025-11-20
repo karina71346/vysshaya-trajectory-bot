@@ -163,7 +163,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
     )
     await message.answer(text, reply_markup=consent_kb())
 
-
 @dp.callback_query(F.data == "consent_continue")
 async def consent_continue(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
