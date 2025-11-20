@@ -33,7 +33,7 @@ TETRAD_URL = "https://tetrad-lidera.netlify.app/"
 CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
 # База для ПРЯМЫХ PDF-ссылок (raw, а не страница GitHub)
-GITHUB_BASE = "https://github.com/karina71346/vysshaya-trajectory-bot/raw/main"
+GITHUB_BASE = "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory-bot/main"
 
 # =====================================================================
 
