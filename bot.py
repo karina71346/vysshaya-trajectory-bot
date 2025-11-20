@@ -6,7 +6,6 @@ from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.enums import ChatMemberStatus, ParseMode
-from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
@@ -17,15 +16,15 @@ from aiogram.types import (
     KeyboardButton,
     ReplyKeyboardRemove,
 )
-
+from aiogram.client.default import DefaultBotProperties
 
 logging.basicConfig(level=logging.INFO)
 
 # ===== НАСТРОЙКИ ======================================================
 
-TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из Render
+TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из переменных окружения Render
 
-CHANNEL_USERNAME = "@businesskodrosta"  # твой канал
+CHANNEL_USERNAME = "@businesskodrosta"  # username канала
 
 # Ссылка на интерактивную тетрадь
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
@@ -148,7 +147,7 @@ def consult_kb() -> InlineKeyboardMarkup:
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    """Точка входа. Только текст и inline-кнопки, БЕЗ главного меню."""
+    # сбрасываем возможное старое состояние
     await state.clear()
     text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
@@ -156,12 +155,12 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "🔹 подтвердить согласие на обработку персональных данных.\n\n"
         "Сначала посмотрите документы, затем нажмите «Далее»."
     )
+    # Главное меню здесь не показываем
     await message.answer(text, reply_markup=consent_kb())
 
 
 @dp.callback_query(F.data == "consent_continue")
 async def consent_continue(callback: types.CallbackQuery, state: FSMContext):
-    """После согласия — спрашиваем имя. Меню пока НЕ показываем."""
     await callback.answer()
     await callback.message.answer(
         "Отлично! Давайте начнём знакомство.\n\n"
@@ -211,8 +210,11 @@ async def ask_email(message: types.Message, state: FSMContext):
 
 @dp.message(Form.waiting_email)
 async def process_email(message: types.Message, state: FSMContext):
-    """Сохраняем почту и отправляем шаг про подписку на канал."""
+    # сохраняем то, что человек прислал как e-mail (валидации пока нет)
     await state.update_data(email=message.text.strip())
+
+    # после этого стадия анкеты закончена, можно очистить состояние
+    await state.clear()
 
     await message.answer(
         "Благодарю! Теперь мы с вами на связи.\n\n"
@@ -261,12 +263,12 @@ async def check_subscription(callback: types.CallbackQuery):
         ChatMemberStatus.CREATOR,
         ChatMemberStatus.RESTRICTED,
     }:
-        # Показываем Папку лидера, а СЛЕДОМ — главное меню
         await callback.message.answer(
             "Отлично, я вижу вас в канале 👌\n"
             "Отправляю Папку лидера.",
         )
         await send_leader_pack(callback.message)
+        # Только после выдачи Папки показываем главное меню
         await callback.message.answer(
             "Вы в главном меню. Выберите нужный раздел 👇",
             reply_markup=main_menu_kb(),
@@ -344,7 +346,7 @@ async def send_about_me(message: types.Message):
     text = (
         "ℹ️ <b>Информация о Карине Коноревой</b>\n\n"
         "• Бизнес-психолог, ментор управленческой зрелости и командный коуч.\n"
-        "• 20+ лет пути от преподавателя до предпринимателя.\n"
+        "• 20+ лет пути: от преподавателя до предпринимателя.\n"
         "• Основатель проекта «Высшая Траектория».\n"
         "• Эксперт по построению живых команд и системному росту бизнеса.\n\n"
         "Через этот бот вы получаете инструменты, которые помогают "
@@ -391,11 +393,17 @@ async def cb_consult(callback: types.CallbackQuery):
 # ---------- СЕРВЕР ДЛЯ RENDER ----------------------------------------
 
 async def on_startup(app: web.Application):
-    # запуск aiogram-поллинга внутри aiohttp-приложения
-    asyncio.create_task(dp.start_polling(bot))
+    # запускаем aiogram-поллинг внутри aiohttp-приложения
+    asyncio.create_task(
+        dp.start_polling(
+            bot,
+            allowed_updates=dp.resolve_used_update_types(),
+        )
+    )
 
 
 async def handle_root(request: web.Request):
+    # простой ответ для health-check Render
     return web.Response(text="Bot is running")
 
 
