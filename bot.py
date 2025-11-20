@@ -145,7 +145,16 @@ def consult_kb() -> InlineKeyboardMarkup:
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
+    # сбрасываем стейт
     await state.clear()
+
+    # 1. Сначала убираем старое меню (Папка лидера / О Карине / Записаться...)
+    await message.answer(
+        "Обновляю данные…",  # можно поменять текст на любой короткий
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+    # 2. Потом показываем приветствие + кнопки согласия (только inline)
     text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
         "Перед тем как получить Папку лидера и интерактивную тетрадь, нужно чуть-чуть формальностей:\n"
