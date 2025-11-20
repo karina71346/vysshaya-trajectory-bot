@@ -26,10 +26,10 @@ TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из Render
 
 CHANNEL_USERNAME = "@businesskodrosta"  # твой канал
 
-# СЮДА вставь ссылку на интерактивную тетрадь
+# Ссылка на интерактивную тетрадь
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
 
-# Форма на консультацию (ты просила именно эту)
+# Форма на консультацию
 CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
 # База для ПРЯМЫХ PDF-ссылок (raw, а не страница GitHub)
@@ -100,19 +100,19 @@ def leader_pack_kb() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="📗 Гайд «Карта управленческой зрелости»",
-                    url=f"{GITHUB_BASE}/karta_upravlencheskoy_zrelosti.pdf",
+                    callback_data="lp_guide",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="📙 Чек-лист зрелого лидера",
-                    url=f"{GITHUB_BASE}/checklist_zrelogo_lidera.pdf",
+                    callback_data="lp_checklist",
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="📚 Подборка книг для лидеров",
-                    url=f"{GITHUB_BASE}/podborca_knig_liderstvo.pdf",
+                    callback_data="lp_books",
                 )
             ],
             [
@@ -257,9 +257,12 @@ async def check_subscription(callback: types.CallbackQuery):
         await callback.message.answer(
             "Отлично, я вижу вас в канале 👌\n"
             "Отправляю Папку лидера и главное меню.",
-            reply_markup=main_menu_kb(),
         )
         await send_leader_pack(callback.message)
+        await callback.message.answer(
+            "Вы в главном меню. Выберите нужный раздел 👇",
+            reply_markup=main_menu_kb(),
+        )
         await callback.answer()
     else:
         await callback.answer(
@@ -298,6 +301,35 @@ async def back_to_menu(callback: types.CallbackQuery):
     await callback.message.answer("Вы в главном меню.", reply_markup=main_menu_kb())
 
 
+# --- отправка самих PDF как файлов по клику в Папке лидера ---
+
+@dp.callback_query(F.data == "lp_guide")
+async def send_guide(callback: types.CallbackQuery):
+    await callback.answer()
+    await callback.message.answer_document(
+        document=f"{GITHUB_BASE}/karta_upravlencheskoy_zrelosti.pdf",
+        caption="Гайд «Карта управленческой зрелости»",
+    )
+
+
+@dp.callback_query(F.data == "lp_checklist")
+async def send_checklist(callback: types.CallbackQuery):
+    await callback.answer()
+    await callback.message.answer_document(
+        document=f"{GITHUB_BASE}/checklist_zrelogo_lidera.pdf",
+        caption="Чек-лист зрелого лидера",
+    )
+
+
+@dp.callback_query(F.data == "lp_books")
+async def send_books(callback: types.CallbackQuery):
+    await callback.answer()
+    await callback.message.answer_document(
+        document=f"{GITHUB_BASE}/podborca_knig_liderstvo.pdf",
+        caption="Подборка книг для современных лидеров",
+    )
+
+
 # ---------- БЛОК «О КАРИНЕ» ------------------------------------------
 
 async def send_about_me(message: types.Message):
@@ -314,7 +346,7 @@ async def send_about_me(message: types.Message):
     await message.answer(text, reply_markup=main_menu_kb())
 
 
-@dp.message(F.text == "ℹ️ Обо мне")
+@dp.message(F.text == "ℹ️ О Карине")
 async def about_me(message: types.Message):
     await send_about_me(message)
 
