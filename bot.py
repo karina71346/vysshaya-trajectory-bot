@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.INFO)
 
 # ===== НАСТРОЙКИ ======================================================
 
-TOKEN = os.getenv("BOT_TOKEN")  # токен бота из переменных окружения
+TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из Render
 
-CHANNEL_USERNAME = "@businesskodrosta"  # твой канал
+CHANNEL_USERNAME = "@businesskodrosta"  # канал
 
 # Ссылка на интерактивную тетрадь
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
@@ -40,8 +40,10 @@ GITHUB_BASE = "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory
 if not TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в переменных окружения.")
 
-# В aiogram 3.13 parse_mode задаётся через DefaultBotProperties
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
 dp = Dispatcher()
 
 
@@ -145,16 +147,10 @@ def consult_kb() -> InlineKeyboardMarkup:
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    # сбрасываем стейт
+    # Чистим состояние и убираем старое меню, если оно висело
     await state.clear()
+    await message.answer("Запускаю бота заново 🔄", reply_markup=ReplyKeyboardRemove())
 
-    # 1. Сначала убираем старое меню (Папка лидера / О Карине / Записаться...)
-    await message.answer(
-        "Обновляю данные…",  # можно поменять текст на любой короткий
-        reply_markup=ReplyKeyboardRemove(),
-    )
-
-    # 2. Потом показываем приветствие + кнопки согласия (только inline)
     text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
         "Перед тем как получить Папку лидера и интерактивную тетрадь, нужно чуть-чуть формальностей:\n"
@@ -162,6 +158,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Сначала посмотрите документы, затем нажмите «Далее»."
     )
     await message.answer(text, reply_markup=consent_kb())
+
 
 @dp.callback_query(F.data == "consent_continue")
 async def consent_continue(callback: types.CallbackQuery, state: FSMContext):
@@ -239,15 +236,11 @@ async def process_email(message: types.Message, state: FSMContext):
         reply_markup=join_kb,
     )
 
-    # Ключевая правка: после e-mail выходим из состояния,
-    # чтобы дальше работали кнопки «Папка лидера», «О Карине» и т.д.
-    await state.clear()
-
 
 # ---------- ПРОВЕРКА ПОДПИСКИ ----------------------------------------
 
 @dp.callback_query(F.data == "check_sub")
-async def check_subscription(callback: types.CallbackQuery, state: FSMContext):
+async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
 
     try:
@@ -267,14 +260,9 @@ async def check_subscription(callback: types.CallbackQuery, state: FSMContext):
         ChatMemberStatus.CREATOR,
         ChatMemberStatus.RESTRICTED,
     }:
-        # На всякий случай тоже чистим состояние
-        await state.clear()
-
-        await callback.message.answer(
-            "Отлично, я вижу вас в канале 👌\n"
-            "Отправляю Папку лидера.",
-        )
+        # Сначала отправляем Папку лидера
         await send_leader_pack(callback.message)
+        # Потом показываем главное меню
         await callback.message.answer(
             "Вы в главном меню. Выберите нужный раздел 👇",
             reply_markup=main_menu_kb(),
@@ -317,7 +305,7 @@ async def back_to_menu(callback: types.CallbackQuery):
     await callback.message.answer("Вы в главном меню.", reply_markup=main_menu_kb())
 
 
-# --- отправка самих PDF как файлов по клику в Папке лидера ---
+# --- отправка самих PDF как файлов по клику в Папке лидера -----------
 
 @dp.callback_query(F.data == "lp_guide")
 async def send_guide(callback: types.CallbackQuery):
@@ -399,7 +387,13 @@ async def cb_consult(callback: types.CallbackQuery):
 # ---------- СЕРВЕР ДЛЯ RENDER ----------------------------------------
 
 async def on_startup(app: web.Application):
-    # запуск aiogram-поллинга внутри aiohttp-приложения
+    # Убираем вебхук, если он где-то был настроен (иначе конфликт getUpdates)
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+    except Exception as e:
+        logging.warning("Не удалось удалить webhook: %s", e)
+
+    # Запускаем поллинг
     asyncio.create_task(dp.start_polling(bot))
 
 
