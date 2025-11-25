@@ -53,6 +53,21 @@ class Form(StatesGroup):
     waiting_email = State()
 
 
+class Practice(StatesGroup):
+    # Делегирование сегодня
+    deleg_zone = State()
+    deleg_task = State()
+    # Откровение: точка реальности
+    reality_zone = State()
+    reality_answers = State()
+    # Колесо баланса
+    wheel_human = State()
+    wheel_leader = State()
+    wheel_team = State()
+    wheel_system = State()
+    wheel_focus = State()
+
+
 # ---------- КЛАВИАТУРЫ -----------------------------------------------
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
@@ -64,6 +79,7 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
                 KeyboardButton(text="ℹ️ О Карине"),
                 KeyboardButton(text="🧭 Записаться на консультацию"),
             ],
+            [KeyboardButton(text="🧩 Практика дня")],
         ],
         resize_keyboard=True,
     )
@@ -138,6 +154,33 @@ def consult_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Оставить заявку", url=CONSULT_LINK)],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_menu")],
+        ]
+    )
+
+
+def practice_kb() -> InlineKeyboardMarkup:
+    """Меню практик дня."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🎯 Делегирование сегодня",
+                    callback_data="pr_delegation",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔍 Откровение: точка реальности",
+                    callback_data="pr_reality",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⚖️ Колесо баланса лидера",
+                    callback_data="pr_wheel",
+                )
+            ],
             [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_menu")],
         ]
     )
@@ -388,6 +431,285 @@ async def consult(message: types.Message):
 async def cb_consult(callback: types.CallbackQuery):
     await callback.answer()
     await send_consult(callback.message)
+
+
+# ---------- ПРАКТИКА ДНЯ ---------------------------------------------
+
+@dp.message(F.text == "🧩 Практика дня")
+async def practice_entry(message: types.Message, state: FSMContext):
+    # чистим возможные старые состояния практик
+    await state.clear()
+    text = (
+        "🧩 <b>Практика дня</b>\n\n"
+        "Что ты берёшь сегодня — прокачать руку делегирования, голову лидера "
+        "или баланс жизни?\n\n"
+        "Выбери формат практики (10–15 минут):"
+    )
+    await message.answer(text, reply_markup=practice_kb())
+
+
+# --- 🎯 Делегирование сегодня ---
+
+@dp.callback_query(F.data == "pr_delegation")
+async def pr_delegation_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    text = (
+        "🎯 <b>Практика «Делегирование сегодня»</b>\n\n"
+        "Где сегодня больше всего застреваешь?\n\n"
+        "▫️ Операционка\n"
+        "▫️ Клиенты / продажи\n"
+        "▫️ Команда\n"
+        "▫️ Личное (быт, семья и т.д.)\n\n"
+        "Напиши коротко, в какой зоне у тебя сегодня больше всего нагрузки."
+    )
+    await callback.message.answer(text)
+    await state.set_state(Practice.deleg_zone)
+
+
+@dp.message(Practice.deleg_zone)
+async def pr_delegation_zone(message: types.Message, state: FSMContext):
+    await state.update_data(deleg_zone=message.text.strip())
+    text = (
+        "Напиши одну задачу, которую ты всё ещё тянешь сам(а), "
+        "хотя её уже можно делегировать."
+    )
+    await message.answer(text)
+    await state.set_state(Practice.deleg_task)
+
+
+@dp.message(Practice.deleg_task)
+async def pr_delegation_task(message: types.Message, state: FSMContext):
+    await state.update_data(deleg_task=message.text.strip())
+    text = (
+        "Что ты уже сделал(а) с этой задачей сегодня?\n\n"
+        "Выбери вариант — честно с собой 🤝"
+    )
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="+1 — просто делегировал(а)",
+                    callback_data="deleg_p1",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="+2 — делегировал(а) + обозначил(а) результат",
+                    callback_data="deleg_p2",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="+3 — заполнил(а) «паспорт задачи»",
+                    callback_data="deleg_p3",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="+5 — не влезал(а) до срока и получил(а) результат",
+                    callback_data="deleg_p5",
+                )
+            ],
+        ]
+    )
+    await message.answer(text, reply_markup=kb)
+    # состояние очистим после выбора баллов
+
+
+async def _finish_delegation(callback: types.CallbackQuery, state: FSMContext, points: int):
+    await callback.answer()
+    text = (
+        f"🎯 Твой ход зафиксирован (+{points} балл(ов)).\n\n"
+        "Сегодня ты сделал(а) шаг как стратег, а не как герой-одиночка.\n\n"
+        "Мини-вопрос для закрепления:\n"
+        "Что станет возможным, если ты будешь так делать 30 дней подряд?\n\n"
+        "Можешь ответить в одном-двух предложениях — это уже смена траектории."
+    )
+    await callback.message.answer(text, reply_markup=main_menu_kb())
+    await state.clear()
+
+
+@dp.callback_query(F.data == "deleg_p1")
+async def deleg_p1(callback: types.CallbackQuery, state: FSMContext):
+    await _finish_delegation(callback, state, 1)
+
+
+@dp.callback_query(F.data == "deleg_p2")
+async def deleg_p2(callback: types.CallbackQuery, state: FSMContext):
+    await _finish_delegation(callback, state, 2)
+
+
+@dp.callback_query(F.data == "deleg_p3")
+async def deleg_p3(callback: types.CallbackQuery, state: FSMContext):
+    await _finish_delegation(callback, state, 3)
+
+
+@dp.callback_query(F.data == "deleg_p5")
+async def deleg_p5(callback: types.CallbackQuery, state: FSMContext):
+    await _finish_delegation(callback, state, 5)
+
+
+# --- 🔍 Откровение: точка реальности ---
+
+@dp.callback_query(F.data == "pr_reality")
+async def pr_reality_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    text = (
+        "🔍 <b>Практика «Откровение: точка реальности»</b>\n\n"
+        "В какой зоне сейчас нужнее всего честное «сканирование»?\n\n"
+        "▫️ Я как лидер\n"
+        "▫️ Я и команда\n"
+        "▫️ Я и бизнес-модель\n"
+        "▫️ Я и моя жизнь вне бизнеса\n\n"
+        "Напиши, какую зону выбираешь."
+    )
+    await callback.message.answer(text)
+    await state.set_state(Practice.reality_zone)
+
+
+@dp.message(Practice.reality_zone)
+async def pr_reality_zone(message: types.Message, state: FSMContext):
+    await state.update_data(reality_zone=message.text.strip())
+    text = (
+        "Спасибо. Теперь ответь на три вопроса в одном сообщении (можно списком):\n\n"
+        "1️⃣ Где я прямо сейчас *делаю вид*, что всё ок, хотя знаю, что это не так?\n"
+        "2️⃣ Чего я боюсь, если признаю реальность такой, какая она есть?\n"
+        "3️⃣ Если бы я смотрел(а) на это как лидер, а не как уставший человек — "
+        "какой был бы мой следующий шаг?\n\n"
+        "Напиши свои ответы одним сообщением."
+    )
+    await message.answer(text)
+    await state.set_state(Practice.reality_answers)
+
+
+@dp.message(Practice.reality_answers)
+async def pr_reality_answers(message: types.Message, state: FSMContext):
+    await state.update_data(reality_answers=message.text.strip())
+    await state.clear()
+    text = (
+        "🔓 Ты уже сделал(а) больше, чем большинство — честно посмотрел(а) на реальность.\n\n"
+        "Если хочешь развернуть это в план действий — приходи с этим откровением на сессию "
+        "или вернись к тетради лидера.\n\n"
+        "🧭 В главном меню есть кнопка «Записаться на консультацию»."
+    )
+    await message.answer(text, reply_markup=main_menu_kb())
+
+
+# --- ⚖️ Колесо баланса лидера ---
+
+@dp.callback_query(F.data == "pr_wheel")
+async def pr_wheel_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    text = (
+        "⚖️ <b>Колесо баланса лидера</b>\n\n"
+        "Мы посмотрим на 4 ключевые зоны:\n"
+        "1) Я как человек\n"
+        "2) Я как лидер\n"
+        "3) Команда\n"
+        "4) Система управления\n\n"
+        "Оцени каждую по шкале от 1 до 10.\n\n"
+        "1️⃣ Я как человек (ресурс, здоровье, «я как живой»).\n"
+        "Напиши число от 1 до 10."
+    )
+    await callback.message.answer(text)
+    await state.set_state(Practice.wheel_human)
+
+
+def _parse_score(text: str) -> int | None:
+    try:
+        value = int(text.strip())
+    except ValueError:
+        return None
+    if 1 <= value <= 10:
+        return value
+    return None
+
+
+@dp.message(Practice.wheel_human)
+async def wheel_human(message: types.Message, state: FSMContext):
+    value = _parse_score(message.text)
+    if value is None:
+        await message.answer("Пожалуйста, напиши число от 1 до 10.")
+        return
+    await state.update_data(wheel_human=value)
+    text = (
+        "2️⃣ Я как лидер (фокус, решения, внутренняя опора).\n"
+        "Напиши число от 1 до 10."
+    )
+    await message.answer(text)
+    await state.set_state(Practice.wheel_leader)
+
+
+@dp.message(Practice.wheel_leader)
+async def wheel_leader(message: types.Message, state: FSMContext):
+    value = _parse_score(message.text)
+    if value is None:
+        await message.answer("Пожалуйста, напиши число от 1 до 10.")
+        return
+    await state.update_data(wheel_leader=value)
+    text = (
+        "3️⃣ Команда (доверие, ответственность, роли).\n"
+        "Напиши число от 1 до 10."
+    )
+    await message.answer(text)
+    await state.set_state(Practice.wheel_team)
+
+
+@dp.message(Practice.wheel_team)
+async def wheel_team(message: types.Message, state: FSMContext):
+    value = _parse_score(message.text)
+    if value is None:
+        await message.answer("Пожалуйста, напиши число от 1 до 10.")
+        return
+    await state.update_data(wheel_team=value)
+    text = (
+        "4️⃣ Система управления (процессы, метрики, предсказуемость).\n"
+        "Напиши число от 1 до 10."
+    )
+    await message.answer(text)
+    await state.set_state(Practice.wheel_system)
+
+
+@dp.message(Practice.wheel_system)
+async def wheel_system(message: types.Message, state: FSMContext):
+    value = _parse_score(message.text)
+    if value is None:
+        await message.answer("Пожалуйста, напиши число от 1 до 10.")
+        return
+    await state.update_data(wheel_system=value)
+    data = await state.get_data()
+
+    h = data.get("wheel_human")
+    l = data.get("wheel_leader")
+    t = data.get("wheel_team")
+    s = data.get("wheel_system")
+
+    text = (
+        "Твои оценки:\n"
+        f"• Я как человек: {h}/10\n"
+        f"• Я как лидер: {l}/10\n"
+        f"• Команда: {t}/10\n"
+        f"• Система управления: {s}/10\n\n"
+        "🎯 Фокус зрелого лидера — не только гореть, но и подтягивать слабое звено.\n\n"
+        "Выбери одну зону как фокус ближайших 7 дней и напиши её текстом "
+        "(например: «Система управления»)."
+    )
+    await message.answer(text)
+    await state.set_state(Practice.wheel_focus)
+
+
+@dp.message(Practice.wheel_focus)
+async def wheel_focus(message: types.Message, state: FSMContext):
+    focus = message.text.strip()
+    await state.clear()
+    text = (
+        f"Отличный выбор: «{focus}».\n\n"
+        "В ближайшие 7 дней задавай себе один вопрос каждый день:\n"
+        "«Что я могу сделать сегодня на +1 балл именно в этой зоне?»\n\n"
+        "Можешь использовать бот как напоминание: заходи в «🧩 Практика дня» "
+        "и фиксируй свои шаги."
+    )
+    await message.answer(text, reply_markup=main_menu_kb())
 
 
 # ---------- СЕРВЕР ДЛЯ RENDER ----------------------------------------
