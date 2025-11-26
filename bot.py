@@ -43,7 +43,7 @@ CHECKLIST_PDF = "checklist_zrelogo_lidera.pdf"
 BOOKS_PDF = "podborca_knig_liderstvo.pdf"
 
 # Фото Карина – файл в репозитории
-KARINA_PHOTO_FILE = "KARINA_PHOTO_URL"
+KARINA_PHOTO_FILE = "KARINA_PHOTO_URL.jpg"
 
 # ===== ТЕКСТЫ =========================================================
 
