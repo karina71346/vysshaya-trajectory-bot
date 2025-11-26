@@ -23,7 +23,6 @@ logging.basicConfig(level=logging.INFO)
 # ===== НАСТРОЙКИ ======================================================
 
 TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из переменных окружения Render
-
 CHANNEL_USERNAME = "@businesskodrosta"  # username канала
 
 # Ссылка на интерактивную тетрадь
@@ -33,7 +32,9 @@ TETRAD_URL = "https://tetrad-lidera.netlify.app/"
 CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
 # База для ПРЯМЫХ PDF-ссылок (raw, а не страница GitHub)
-GITHUB_BASE = "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory-bot/main"
+GITHUB_BASE = (
+    "https://raw.githubusercontent.com/karina71346/vysshaya-trajectory-bot/main"
+)
 
 # =====================================================================
 
@@ -69,6 +70,7 @@ class Practice(StatesGroup):
 
 
 # ---------- КЛАВИАТУРЫ -----------------------------------------------
+
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
     """Главное меню."""
@@ -188,17 +190,22 @@ def practice_kb() -> InlineKeyboardMarkup:
 
 # ---------- СТАРТ И СБОР ДАННЫХ --------------------------------------
 
+
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     # сбрасываем возможное старое состояние
     await state.clear()
+
+    # сначала уберём старое меню, если оно было
+    await message.answer("Запускаю бот «Высшая траектория»…", reply_markup=ReplyKeyboardRemove())
+
     text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
         "Перед тем как получить Папку лидера и интерактивную тетрадь, нужно чуть-чуть формальностей:\n"
         "🔹 подтвердить согласие на обработку персональных данных.\n\n"
         "Сначала посмотрите документы, затем нажмите «Далее»."
     )
-    # Главное меню здесь не показываем
+    # Главное меню здесь не показываем — только inline-кнопки согласия
     await message.answer(text, reply_markup=consent_kb())
 
 
@@ -285,6 +292,7 @@ async def process_email(message: types.Message, state: FSMContext):
 
 # ---------- ПРОВЕРКА ПОДПИСКИ ----------------------------------------
 
+
 @dp.callback_query(F.data == "check_sub")
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -327,6 +335,7 @@ async def check_subscription(callback: types.CallbackQuery):
 
 # ---------- ПАПКА ЛИДЕРА ---------------------------------------------
 
+
 async def send_leader_pack(message: types.Message):
     text = (
         "🎁 <b>Папка лидера</b>\n\n"
@@ -355,6 +364,7 @@ async def back_to_menu(callback: types.CallbackQuery):
 
 
 # --- отправка самих PDF как файлов по клику в Папке лидера ---
+
 
 @dp.callback_query(F.data == "lp_guide")
 async def send_guide(callback: types.CallbackQuery):
@@ -385,6 +395,7 @@ async def send_books(callback: types.CallbackQuery):
 
 # ---------- БЛОК «О КАРИНЕ» ------------------------------------------
 
+
 async def send_about_me(message: types.Message):
     text = (
         "ℹ️ <b>Информация о Карине Коноревой</b>\n\n"
@@ -412,6 +423,7 @@ async def cb_about_me(callback: types.CallbackQuery):
 
 # ---------- КОНСУЛЬТАЦИЯ ---------------------------------------------
 
+
 async def send_consult(message: types.Message):
     text = (
         "🧭 <b>Записаться на консультацию</b>\n\n"
@@ -435,9 +447,10 @@ async def cb_consult(callback: types.CallbackQuery):
 
 # ---------- ПРАКТИКА ДНЯ ---------------------------------------------
 
+
 @dp.message(F.text == "🧩 Практика дня")
 async def practice_entry(message: types.Message, state: FSMContext):
-    # чистим возможные старые состояния практик
+    # чистим возможные старые состояния практик / форм
     await state.clear()
     text = (
         "🧩 <b>Практика дня</b>\n\n"
@@ -449,6 +462,7 @@ async def practice_entry(message: types.Message, state: FSMContext):
 
 
 # --- 🎯 Делегирование сегодня ---
+
 
 @dp.callback_query(F.data == "pr_delegation")
 async def pr_delegation_start(callback: types.CallbackQuery, state: FSMContext):
@@ -513,7 +527,6 @@ async def pr_delegation_task(message: types.Message, state: FSMContext):
         ]
     )
     await message.answer(text, reply_markup=kb)
-    # состояние очистим после выбора баллов
 
 
 async def _finish_delegation(callback: types.CallbackQuery, state: FSMContext, points: int):
@@ -550,6 +563,7 @@ async def deleg_p5(callback: types.CallbackQuery, state: FSMContext):
 
 
 # --- 🔍 Откровение: точка реальности ---
+
 
 @dp.callback_query(F.data == "pr_reality")
 async def pr_reality_start(callback: types.CallbackQuery, state: FSMContext):
@@ -597,6 +611,7 @@ async def pr_reality_answers(message: types.Message, state: FSMContext):
 
 # --- ⚖️ Колесо баланса лидера ---
 
+
 @dp.callback_query(F.data == "pr_wheel")
 async def pr_wheel_start(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -615,7 +630,8 @@ async def pr_wheel_start(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(Practice.wheel_human)
 
 
-def _parse_score(text: str) -> int | None:
+def _parse_score(text: str):
+    """Пытаемся распарсить оценку от 1 до 10. Если не получилось — None."""
     try:
         value = int(text.strip())
     except ValueError:
@@ -713,6 +729,7 @@ async def wheel_focus(message: types.Message, state: FSMContext):
 
 
 # ---------- СЕРВЕР ДЛЯ RENDER ----------------------------------------
+
 
 async def on_startup(app: web.Application):
     # запускаем aiogram-поллинг внутри aiohttp-приложения
