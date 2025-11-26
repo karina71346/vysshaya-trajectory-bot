@@ -72,18 +72,33 @@ class Practice(StatesGroup):
 # ---------- КЛАВИАТУРЫ -----------------------------------------------
 
 
-def main_menu_kb() -> ReplyKeyboardMarkup:
-    """Главное меню."""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📁 Папка лидера")],
+def main_menu_kb() -> InlineKeyboardMarkup:
+    """Главное меню как INLINE, без нижней панели."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
             [
-                KeyboardButton(text="ℹ️ О Карине"),
-                KeyboardButton(text="🧭 Записаться на консультацию"),
+                InlineKeyboardButton(
+                    text="📁 Папка лидера",
+                    callback_data="menu_leader_pack",
+                )
             ],
-            [KeyboardButton(text="🧩 Практика дня")],
-        ],
-        resize_keyboard=True,
+            [
+                InlineKeyboardButton(
+                    text="🧩 Практика дня",
+                    callback_data="menu_practice",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="ℹ️ О Карине",
+                    callback_data="about_me_cb",
+                ),
+                InlineKeyboardButton(
+                    text="🧭 Записаться на консультацию",
+                    callback_data="consult_cb",
+                ),
+            ],
+        ]
     )
 
 
@@ -109,7 +124,7 @@ def consent_kb() -> InlineKeyboardMarkup:
 
 
 def leader_pack_kb() -> InlineKeyboardMarkup:
-    """Кнопки под Папкой лидера."""
+    """Кнопки под Папкой лидера: тетрадь + PDF + назад в главное меню."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -138,21 +153,16 @@ def leader_pack_kb() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="ℹ️ О Карине",
-                    callback_data="about_me_cb",
-                ),
-                InlineKeyboardButton(
-                    text="🧭 Консультация",
-                    callback_data="consult_cb",
-                ),
+                    text="⬅️ В главное меню",
+                    callback_data="back_to_menu",
+                )
             ],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_menu")],
         ]
     )
 
 
 def consult_kb() -> InlineKeyboardMarkup:
-    """Кнопка на заявку плюс возврат в меню."""
+    """Кнопка на заявку плюс возврат в меню (INLINE)."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Оставить заявку", url=CONSULT_LINK)],
@@ -196,8 +206,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
     # сбрасываем возможное старое состояние
     await state.clear()
 
-    # сначала уберём старое меню, если оно было
-    await message.answer("Запускаю бот «Высшая траектория»…", reply_markup=ReplyKeyboardRemove())
+    # сразу убираем любую старую reply-клавиатуру
+    await message.answer(
+        "Запускаю бот «Высшая траектория»…",
+        reply_markup=ReplyKeyboardRemove(),
+    )
 
     text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
@@ -205,7 +218,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "🔹 подтвердить согласие на обработку персональных данных.\n\n"
         "Сначала посмотрите документы, затем нажмите «Далее»."
     )
-    # Главное меню здесь не показываем — только inline-кнопки согласия
     await message.answer(text, reply_markup=consent_kb())
 
 
@@ -224,9 +236,11 @@ async def consent_continue(callback: types.CallbackQuery, state: FSMContext):
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text.strip())
 
+    # здесь reply-клавиатура уместна: только для отправки контакта
     kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Отправить мой номер", request_contact=True)]],
         resize_keyboard=True,
+        one_time_keyboard=True,
     )
 
     await message.answer(
@@ -260,10 +274,10 @@ async def ask_email(message: types.Message, state: FSMContext):
 
 @dp.message(Form.waiting_email)
 async def process_email(message: types.Message, state: FSMContext):
-    # сохраняем то, что человек прислал как e-mail (валидации пока нет)
+    # сохраняем e-mail (валидации пока нет)
     await state.update_data(email=message.text.strip())
 
-    # после этого стадия анкеты закончена, можно очистить состояние
+    # анкета закончена, очищаем состояние
     await state.clear()
 
     await message.answer(
@@ -319,7 +333,7 @@ async def check_subscription(callback: types.CallbackQuery):
             "Отправляю Папку лидера.",
         )
         await send_leader_pack(callback.message)
-        # Только после выдачи Папки показываем главное меню
+        # Только после выдачи Папки показываем ГЛАВНОЕ МЕНЮ (inline)
         await callback.message.answer(
             "Вы в главном меню. Выберите нужный раздел 👇",
             reply_markup=main_menu_kb(),
@@ -352,9 +366,10 @@ async def send_leader_pack(message: types.Message):
     await message.answer(text, reply_markup=leader_pack_kb())
 
 
-@dp.message(F.text == "📁 Папка лидера")
-async def menu_leader_pack(message: types.Message):
-    await send_leader_pack(message)
+@dp.callback_query(F.data == "menu_leader_pack")
+async def cb_menu_leader_pack(callback: types.CallbackQuery):
+    await callback.answer()
+    await send_leader_pack(callback.message)
 
 
 @dp.callback_query(F.data == "back_to_menu")
@@ -410,11 +425,6 @@ async def send_about_me(message: types.Message):
     await message.answer(text, reply_markup=main_menu_kb())
 
 
-@dp.message(F.text == "ℹ️ О Карине")
-async def about_me(message: types.Message):
-    await send_about_me(message)
-
-
 @dp.callback_query(F.data == "about_me_cb")
 async def cb_about_me(callback: types.CallbackQuery):
     await callback.answer()
@@ -434,11 +444,6 @@ async def send_consult(message: types.Message):
     await message.answer(text, reply_markup=consult_kb())
 
 
-@dp.message(F.text == "🧭 Записаться на консультацию")
-async def consult(message: types.Message):
-    await send_consult(message)
-
-
 @dp.callback_query(F.data == "consult_cb")
 async def cb_consult(callback: types.CallbackQuery):
     await callback.answer()
@@ -448,8 +453,8 @@ async def cb_consult(callback: types.CallbackQuery):
 # ---------- ПРАКТИКА ДНЯ ---------------------------------------------
 
 
-@dp.message(F.text == "🧩 Практика дня")
-async def practice_entry(message: types.Message, state: FSMContext):
+@dp.callback_query(F.data == "menu_practice")
+async def practice_entry(callback: types.CallbackQuery, state: FSMContext):
     # чистим возможные старые состояния практик / форм
     await state.clear()
     text = (
@@ -458,7 +463,8 @@ async def practice_entry(message: types.Message, state: FSMContext):
         "или баланс жизни?\n\n"
         "Выбери формат практики (10–15 минут):"
     )
-    await message.answer(text, reply_markup=practice_kb())
+    await callback.message.answer(text, reply_markup=practice_kb())
+    await callback.answer()
 
 
 # --- 🎯 Делегирование сегодня ---
@@ -604,7 +610,7 @@ async def pr_reality_answers(message: types.Message, state: FSMContext):
         "🔓 Ты уже сделал(а) больше, чем большинство — честно посмотрел(а) на реальность.\n\n"
         "Если хочешь развернуть это в план действий — приходи с этим откровением на сессию "
         "или вернись к тетради лидера.\n\n"
-        "🧭 В главном меню есть кнопка «Записаться на консультацию»."
+        "🧭 В главном меню есть раздел с консультацией и практиками."
     )
     await message.answer(text, reply_markup=main_menu_kb())
 
@@ -722,7 +728,7 @@ async def wheel_focus(message: types.Message, state: FSMContext):
         f"Отличный выбор: «{focus}».\n\n"
         "В ближайшие 7 дней задавай себе один вопрос каждый день:\n"
         "«Что я могу сделать сегодня на +1 балл именно в этой зоне?»\n\n"
-        "Можешь использовать бот как напоминание: заходи в «🧩 Практика дня» "
+        "Можешь использовать бот как напоминание: заходи в «Практика дня» "
         "и фиксируй свои шаги."
     )
     await message.answer(text, reply_markup=main_menu_kb())
