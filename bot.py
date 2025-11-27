@@ -20,45 +20,44 @@ from aiogram.types import (
 
 logging.basicConfig(level=logging.INFO)
 
-# ==== НАСТРОЙКИ =======================================================
+# ===== НАСТРОЙКИ ======================================================
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")          # токен из Render
 
-# Канал
-CHANNEL_USERNAME = "@businesskodrosta"
+CHANNEL_USERNAME = "@businesskodrosta"  # username канала
 CHANNEL_LINK = "https://t.me/businesskodrosta"
 
-# Материалы папки лидера
+# Ссылки папки лидера
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
-GUIDE_URL = "https://raw.githubusercontent.com/karina..."  # гайд
-CHECKLIST_URL = "https://raw.githubusercontent.com/karina..."  # чек-лист
-BOOKS_URL = "https://raw.githubusercontent.com/karina..."  # подборка книг
+GUIDE_URL = "https://example.com/guide"        # подставь свои ссылки
+CHECKLIST_URL = "https://example.com/checklist"
+BOOKS_URL = "https://example.com/books"
 
-# Консультация
+# Форма на консультацию
 CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
-# Файлы на сервере
+# Локальные файлы на сервере
 POLICY_DOC_PATH = "docs/politika_konfidencialnosti.pdf"
 CONSENT_DOC_PATH = "docs/soglasie_na_obrabotku_pd.pdf"
-KARINA_PHOTO_PATH = "media/karina_photo.jpg"
+KARINA_PHOTO_PATH = "media/KARINA_PHOTO_URL.jpg"   # как ты файл реально назвала
 
-
-# ==== СОСТОЯНИЯ =======================================================
+# ===== СОСТОЯНИЯ ======================================================
 
 class Registration(StatesGroup):
     waiting_for_name = State()
     waiting_for_channel_confirm = State()
 
-
-# ==== КЛАВИАТУРЫ ======================================================
+# ===== КЛАВИАТУРЫ =====================================================
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📁 Папка лидера")],
             [KeyboardButton(text="🧠 Практика дня")],
-            [KeyboardButton(text="ℹ️ О Карине"),
-             KeyboardButton(text="📍 Записаться на консультацию")],
+            [
+                KeyboardButton(text="ℹ️ О Карине"),
+                KeyboardButton(text="📍 Записаться на консультацию"),
+            ],
         ],
         resize_keyboard=True,
     )
@@ -80,21 +79,11 @@ def pd_agree_kb() -> InlineKeyboardMarkup:
 def folder_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="📘 Открыть тетрадь лидера",
-                url=TETRAD_URL)],
-            [InlineKeyboardButton(
-                text="📗 Гайд «Карта управленческой зрелости»",
-                url=GUIDE_URL)],
-            [InlineKeyboardButton(
-                text="📙 Чек-лист зрелого лидера",
-                url=CHECKLIST_URL)],
-            [InlineKeyboardButton(
-                text="📚 Подборка книг для лидеров",
-                url=BOOKS_URL)],
-            [InlineKeyboardButton(
-                text="⬅️ В главное меню",
-                callback_data="back_to_main")],
+            [InlineKeyboardButton(text="📘 Открыть тетрадь лидера", url=TETRAD_URL)],
+            [InlineKeyboardButton(text="📗 Гайд «Карта управленческой зрелости»", url=GUIDE_URL)],
+            [InlineKeyboardButton(text="📙 Чек-лист зрелого лидера", url=CHECKLIST_URL)],
+            [InlineKeyboardButton(text="📚 Подборка книг для лидеров", url=BOOKS_URL)],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_main")],
         ]
     )
 
@@ -102,12 +91,8 @@ def folder_kb() -> InlineKeyboardMarkup:
 def karina_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="Перейти в канал «Бизнес со смыслом»",
-                url=CHANNEL_LINK)],
-            [InlineKeyboardButton(
-                text="Записаться на консультацию",
-                url=CONSULT_LINK)],
+            [InlineKeyboardButton(text="Перейти в канал «Бизнес со смыслом»", url=CHANNEL_LINK)],
+            [InlineKeyboardButton(text="Записаться на консультацию", url=CONSULT_LINK)],
         ]
     )
 
@@ -115,15 +100,9 @@ def karina_kb() -> InlineKeyboardMarkup:
 def practice_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="🎯 Колесо фокуса",
-                callback_data="practice_focus_wheel")],
-            [InlineKeyboardButton(
-                text="🧩 Делегирование — 1 шаг",
-                callback_data="practice_delegation")],
-            [InlineKeyboardButton(
-                text="🔍 «Откровение: точка реальности»",
-                callback_data="practice_reality")],
+            [InlineKeyboardButton(text="🎯 Колесо фокуса", callback_data="practice_focus_wheel")],
+            [InlineKeyboardButton(text="🧩 Делегирование — 1 шаг", callback_data="practice_delegation")],
+            [InlineKeyboardButton(text="🔍 «Откровение: точка реальности»", callback_data="practice_reality")],
         ]
     )
 
@@ -131,14 +110,11 @@ def practice_menu_kb() -> InlineKeyboardMarkup:
 def back_to_practices_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="⬅️ К другим практикам",
-                callback_data="practice_menu")],
+            [InlineKeyboardButton(text="⬅️ К другим практикам", callback_data="practice_menu")],
         ]
     )
 
-
-# ==== ТЕКСТ «О КАРИНЕ» =================================================
+# ===== ТЕКСТ "О КАРИНЕ" ===============================================
 
 KARINA_ABOUT_TEXT = (
     "Карина Конорева — бизнес-архитектор, интегральный бизнес психолог и коуч лидеров.\n\n"
@@ -171,11 +147,11 @@ KARINA_ABOUT_TEXT = (
     "и строить предсказуемый бизнес с опорой на команду."
 )
 
-
-# ==== РОУТЕР ==========================================================
+# ===== РОУТЕР =========================================================
 
 router = Router()
 
+# --- /start и персональные данные ------------------------------------
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
@@ -183,10 +159,9 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
 
     text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
-        "Перед тем как получить Папку лидера и практики, немного формальностей:\n"
+        "Перед тем как получить Папку лидера и интерактивную тетрадь, немного формальностей:\n"
         "▪️ подтвердить согласие на обработку персональных данных.\n\n"
-        "Сначала посмотрите документы по кнопкам ниже, затем нажмите кнопку "
-        "«✅ Ознакомился(ась), продолжить»."
+        "Сначала посмотрите документы, затем нажмите кнопку «Ознакомился(ась), продолжить» ниже."
     )
     await message.answer(text)
 
@@ -217,6 +192,7 @@ async def on_pd_agree(callback: CallbackQuery, state: FSMContext) -> None:
     )
     await state.set_state(Registration.waiting_for_name)
 
+# --- Имя и подписка на канал -----------------------------------------
 
 @router.message(Registration.waiting_for_name)
 async def on_name(message: Message, state: FSMContext) -> None:
@@ -229,18 +205,15 @@ async def on_name(message: Message, state: FSMContext) -> None:
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="Перейти в канал «Бизнес со смыслом»",
-                url=CHANNEL_LINK)],
-            [InlineKeyboardButton(
-                text="✅ Я вступил(а) в канал",
-                callback_data="joined_channel")],
+            [InlineKeyboardButton(text="Перейти в канал «Бизнес со смыслом»", url=CHANNEL_LINK)],
+            [InlineKeyboardButton(text="✅ Я вступил(а) в канал", callback_data="joined_channel")],
         ]
     )
 
     await message.answer(
         f"{name}, благодарю! Теперь мы с вами на связи.\n\n"
-        "Чтобы получить материалы, нужно вступить в канал «Бизнес со смыслом» и подтвердить участие.",
+        "Чтобы получить материалы, нужно вступить в канал «Бизнес со смыслом» и подтвердить участие.\n"
+        "Перейдите в канал по кнопке ниже, затем вернитесь в бот и нажмите «Я вступил(а)».",
         reply_markup=kb,
     )
     await state.set_state(Registration.waiting_for_channel_confirm)
@@ -274,6 +247,7 @@ async def on_joined_channel(callback: CallbackQuery, state: FSMContext, bot: Bot
         )
 
     except TelegramBadRequest:
+        # если по какой-то причине не смогли проверить подписку
         await callback.message.answer(
             "Не удалось автоматически проверить подписку на канал, "
             "но вы всё равно можете пользоваться ботом.",
@@ -281,8 +255,7 @@ async def on_joined_channel(callback: CallbackQuery, state: FSMContext, bot: Bot
         )
         await state.clear()
 
-
-# ==== ПАПКА ЛИДЕРА ====================================================
+# --- Папка лидера -----------------------------------------------------
 
 @router.message(F.text == "📁 Папка лидера")
 async def show_leader_folder(message: Message) -> None:
@@ -300,8 +273,7 @@ async def back_to_main(callback: CallbackQuery) -> None:
         reply_markup=main_menu_kb(),
     )
 
-
-# ==== ПРАКТИКА ДНЯ ====================================================
+# --- Практика дня -----------------------------------------------------
 
 @router.message(F.text == "🧠 Практика дня")
 async def practice_entry(message: Message) -> None:
@@ -365,8 +337,7 @@ async def practice_reality(callback: CallbackQuery) -> None:
     )
     await callback.message.answer(text, reply_markup=back_to_practices_kb())
 
-
-# ==== О КАРИНЕ ========================================================
+# --- О Карине ---------------------------------------------------------
 
 @router.message(F.text == "ℹ️ О Карине")
 async def about_karina(message: Message) -> None:
@@ -380,16 +351,13 @@ async def about_karina(message: Message) -> None:
     except FileNotFoundError:
         await message.answer(KARINA_ABOUT_TEXT, reply_markup=karina_kb())
 
-
-# ==== КОНСУЛЬТАЦИЯ ====================================================
+# --- Консультация -----------------------------------------------------
 
 @router.message(F.text == "📍 Записаться на консультацию")
 async def consultation(message: Message) -> None:
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="Записаться через форму",
-                url=CONSULT_LINK)]
+            [InlineKeyboardButton(text="Записаться через форму", url=CONSULT_LINK)]
         ]
     )
     await message.answer(
@@ -397,8 +365,7 @@ async def consultation(message: Message) -> None:
         reply_markup=kb,
     )
 
-
-# ==== ФОЛБЭК ==========================================================
+# --- Фоллбек ----------------------------------------------------------
 
 @router.message()
 async def fallback(message: Message) -> None:
@@ -407,17 +374,13 @@ async def fallback(message: Message) -> None:
         reply_markup=main_menu_kb(),
     )
 
-
-# ==== ЗАПУСК БОТА =====================================================
+# ===== ЗАПУСК =========================================================
 
 async def main() -> None:
     bot = Bot(TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
-
-    logging.info("==> Запуск опроса для бота")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
