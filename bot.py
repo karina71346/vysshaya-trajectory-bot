@@ -16,6 +16,7 @@ from aiogram.types import (
     KeyboardButton,
     FSInputFile,
 )
+from aiogram.client.default import DefaultBotProperties
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,24 +27,19 @@ TOKEN = os.getenv("BOT_TOKEN")  # Токен бота из Render
 if not TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN в переменных окружения")
 
-# Юзернейм и ссылка на канал
 CHANNEL_USERNAME = "@businesskodrosta"
 CHANNEL_LINK = "https://t.me/businesskodrosta"
 
-# Ссылка на интерактивную тетрадь
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
-
-# Форма на консультацию
 CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
-# Имена файлов в проекте
 POLITIKA_FILE = "politika_konfidencialnosti.pdf"
 SOGLASIE_FILE = "soglasie_na_obrabotku_pd.pdf"
 KARTA_FILE = "karta_upravlencheskoy_zrelosti.pdf"
 CHECKLIST_FILE = "checklist_zrelogo_lidera.pdf"
 BOOKS_FILE = "podborka_knig_dlya_liderov.pdf"
 
-KARINA_PHOTO_FILE = "KARINA_PHOTO_URL"
+KARINA_PHOTO_FILE = "KARINA_PHOTO_URL"  # имя файла с фото в репозитории
 
 # ===== FSM ============================================================
 
@@ -131,7 +127,8 @@ def practice_menu_kb() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🎯 Колесо фокуса", callback_data="practice_focus_wheel"
+                    text="🎯 Колесо фокуса",
+                    callback_data="practice_focus_wheel",
                 )
             ],
             [
@@ -234,7 +231,7 @@ AFTER_JOIN_FAIL_TEXT = (
 
 LEADERS_FOLDER_TEXT = (
     "📂 Папка лидера\n\n"
-    "Здесь собраны ключевые материалы, которые помогут навести порядок в управлении "
+    "Здесь собраны ключевые материалы, которые помогают навести порядок в управлении "
     "и двигаться к предсказуемому росту."
 )
 
@@ -256,8 +253,9 @@ PRACTICE_FOCUS_WHEEL_TEXT = (
 
 PRACTICE_MICRODELEGATION_TEXT = (
     "📤 Практика дня — Микроделегирование\n\n"
-    "1️⃣ Выпиши 5 задач, которые забирают у тебя больше всего энергии, но не требуют твоей уникальной экспертизы.\n"
-    "2️⃣ Выбери 1 задачу и передай её сотруднику, добавив понятный критерий результата и срок.\n"
+    "1️⃣ Выпиши 5 задач, которые забирают у тебя больше всего энергии, "
+    "но не требуют твоей уникальной экспертизы.\n"
+    "2️⃣ Выбери 1 задачу и передай её сотруднику с понятным результатом и сроком.\n"
     "3️⃣ Зафиксируй в календаре короткий слёт на проверку.\n\n"
     "Сфокусируйся сегодня на том, чтобы не «передумать и забрать обратно» 🙂"
 )
@@ -273,7 +271,7 @@ PRACTICE_REALITY_TEXT = (
 
 PRACTICE_MICROSTEP_TEXT = (
     "🚀 Практика дня — Микрошаг к Высшей траектории\n\n"
-    "Представь себя через 2 года, когда бизнес работает более предсказуемо, а команда усиливает тебя.\n\n"
+    "Представь себя через 2 года, когда бизнес работает предсказуемо, а команда усиливает тебя.\n\n"
     "Запиши:\n"
     "1. Что в твоём дне обязательно присутствует?\n"
     "2. Чего в нём больше нет?\n"
@@ -289,12 +287,12 @@ ABOUT_KARINA_TEXT = (
     "• Автор проекта «Код Роста».\n"
     "• Спикер Всемирного Бизнес-форума 2025, внесённого в книгу рекордов страны и мира.\n"
     "• Победитель в номинации «HR-эксперт года» премии «Лидеры Эпохи 2024».\n"
-    "• Лауреат Гран-При в конкурсе «Лучший по профессии» среди специалистов в области управления персоналом.\n"
+    "• Лауреат Гран-При в конкурсе «Лучший по профессии» среди специалистов по управлению персоналом.\n"
     "• Бизнес-психолог, ментор управленческой зрелости, коуч лидеров и команд.\n"
     "• Эксперт по построению живых команд и системному росту бизнеса.\n"
     "• Член Академии социальных технологий и Российского общества «Знание».\n\n"
     "• 15+ лет опыта создания трансформационных программ для предпринимателей и лидеров.\n"
-    "• Автор 26 статей в научных журналах и СМИ.\n"
+    "• 26 статей в научных журналах и СМИ.\n"
     "• 250+ часов индивидуального и командного коучинга.\n\n"
     "*Образование:*\n"
     "• Высшее образование: психология, педагогика, философия.\n"
@@ -315,7 +313,7 @@ UNKNOWN_TEXT = (
 
 # ===== БОТ И ДИСПЕТЧЕР ================================================
 
-bot = Bot(TOKEN, parse_mode="Markdown")
+bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode="Markdown"))
 dp = Dispatcher()
 
 
@@ -325,17 +323,22 @@ dp = Dispatcher()
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
 
-    # Приветствие и описание формальностей
     await message.answer(WELCOME_TEXT)
 
-    # Отправка документов
+    # документы
     try:
-        await message.answer_document(FSInputFile(POLITIKA_FILE), caption="Политика конфиденциальности")
+        await message.answer_document(
+            FSInputFile(POLITIKA_FILE),
+            caption="Политика конфиденциальности",
+        )
     except Exception as e:
         logging.warning(f"Не удалось отправить {POLITIKA_FILE}: {e}")
 
     try:
-        await message.answer_document(FSInputFile(SOGLASIE_FILE), caption="Согласие на обработку персональных данных")
+        await message.answer_document(
+            FSInputFile(SOGLASIE_FILE),
+            caption="Согласие на обработку персональных данных",
+        )
     except Exception as e:
         logging.warning(f"Не удалось отправить {SOGLASIE_FILE}: {e}")
 
@@ -366,7 +369,6 @@ async def process_name(message: types.Message, state: FSMContext):
 @dp.callback_query(F.data == "joined_channel")
 async def joined_channel(callback: types.CallbackQuery):
     await callback.answer()
-
     user_id = callback.from_user.id
 
     try:
@@ -407,7 +409,7 @@ async def send_karta(callback: types.CallbackQuery):
     except Exception as e:
         logging.warning(f"Не удалось отправить {KARTA_FILE}: {e}")
         await callback.message.answer("Файл пока недоступен.")
-        
+
 
 @dp.callback_query(F.data == "send_checklist")
 async def send_checklist(callback: types.CallbackQuery):
@@ -454,14 +456,18 @@ async def practice_day(message: types.Message):
 @dp.callback_query(F.data == "practice_menu")
 async def show_practice_menu(callback: types.CallbackQuery):
     await callback.answer()
-    await callback.message.answer(PRACTICE_CHOICE_TEXT, reply_markup=practice_menu_kb())
+    await callback.message.answer(
+        PRACTICE_CHOICE_TEXT,
+        reply_markup=practice_menu_kb(),
+    )
 
 
 @dp.callback_query(F.data == "practice_focus_wheel")
 async def practice_focus_wheel(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer(
-        PRACTICE_FOCUS_WHEEL_TEXT, reply_markup=practice_back_kb()
+        PRACTICE_FOCUS_WHEEL_TEXT,
+        reply_markup=practice_back_kb(),
     )
 
 
@@ -469,7 +475,8 @@ async def practice_focus_wheel(callback: types.CallbackQuery):
 async def practice_microdelegation(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer(
-        PRACTICE_MICRODELEGATION_TEXT, reply_markup=practice_back_kb()
+        PRACTICE_MICRODELEGATION_TEXT,
+        reply_markup=practice_back_kb(),
     )
 
 
@@ -477,7 +484,8 @@ async def practice_microdelegation(callback: types.CallbackQuery):
 async def practice_reality(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer(
-        PRACTICE_REALITY_TEXT, reply_markup=practice_back_kb()
+        PRACTICE_REALITY_TEXT,
+        reply_markup=practice_back_kb(),
     )
 
 
@@ -485,7 +493,8 @@ async def practice_reality(callback: types.CallbackQuery):
 async def practice_microstep(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.answer(
-        PRACTICE_MICROSTEP_TEXT, reply_markup=practice_back_kb()
+        PRACTICE_MICROSTEP_TEXT,
+        reply_markup=practice_back_kb(),
     )
 
 
@@ -493,14 +502,11 @@ async def practice_microstep(callback: types.CallbackQuery):
 
 @dp.message(F.text == "ℹ️ О Карине")
 async def about_karina(message: types.Message):
-    # Фото
     try:
         photo = FSInputFile(KARINA_PHOTO_FILE)
         await message.answer_photo(photo=photo)
     except Exception as e:
         logging.warning(f"Не удалось отправить фото {KARINA_PHOTO_FILE}: {e}")
-
-    # Текст
     await message.answer(ABOUT_KARINA_TEXT, reply_markup=about_karina_kb())
 
 
@@ -514,11 +520,11 @@ async def consultation(message: types.Message):
     )
 
 
-# --- /version для проверки --------------------------------------------
+# --- /version ---------------------------------------------------------
 
 @dp.message(Command("version"))
 async def cmd_version(message: types.Message):
-    await message.answer("VERSION: no-phone-email + full-practices-menu")
+    await message.answer("VERSION: aiogram-3.7-fix-no-phone-email-full-practices")
 
 
 # --- Фолбек -----------------------------------------------------------
@@ -544,7 +550,6 @@ async def start_web_app():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-    # держим сервер живым
     while True:
         await asyncio.sleep(3600)
 
