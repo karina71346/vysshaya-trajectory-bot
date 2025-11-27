@@ -2,57 +2,61 @@ import os
 import asyncio
 import logging
 
-from aiogram import Bot, Dispatcher, F, Router
-from aiogram.enums import ChatMemberStatus
-from aiogram.exceptions import TelegramBadRequest
+from aiohttp import web
+from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import (
-    Message,
-    CallbackQuery,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove,
     FSInputFile,
 )
+from aiogram.enums import ChatMemberStatus
 
 logging.basicConfig(level=logging.INFO)
 
 # ===== НАСТРОЙКИ ======================================================
 
-TOKEN = os.getenv("BOT_TOKEN")          # токен из Render
+TOKEN = os.getenv("BOT_TOKEN")  # токен из Render
 
-CHANNEL_USERNAME = "@businesskodrosta"  # username канала
-CHANNEL_LINK = "https://t.me/businesskodrosta"
+CHANNEL_USERNAME = "@businesskodrosta"
+CHANNEL_URL = "https://t.me/businesskodrosta"
 
-# Ссылки папки лидера
+# Ссылка на интерактивную тетрадь
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
-GUIDE_URL = "https://example.com/guide"        # подставь свои ссылки
-CHECKLIST_URL = "https://example.com/checklist"
-BOOKS_URL = "https://example.com/books"
 
 # Форма на консультацию
 CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
-# Локальные файлы на сервере
-POLICY_DOC_PATH = "docs/politika_konfidencialnosti.pdf"
-CONSENT_DOC_PATH = "docs/soglasie_na_obrabotku_pd.pdf"
-KARINA_PHOTO_PATH = "media/KARINA_PHOTO_URL.jpg"   # как ты файл реально назвала
+# Локальные файлы в репозитории
+KARINA_PHOTO_FILE = "KARINA_PHOTO_URL.jpg"
+
+PRIVACY_POLICY_FILE = "politika_konfidencialnosti.pdf"
+PD_AGREEMENT_FILE = "soglasie_na_obrabotku_pd.pdf"
+
+GUIDE_FILE = "karta_upravlencheskoy_zrelosti.pdf"
+CHECKLIST_FILE = "checklist_zrelogo_lidera.pdf"
+BOOKS_FILE = "podborka_knig_dlya_liderov.pdf"
+
 
 # ===== СОСТОЯНИЯ ======================================================
 
-class Registration(StatesGroup):
-    waiting_for_name = State()
-    waiting_for_channel_confirm = State()
+class RegStates(StatesGroup):
+    waiting_consent = State()
+    waiting_name = State()
+    finished = State()
+
 
 # ===== КЛАВИАТУРЫ =====================================================
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📁 Папка лидера")],
+            [KeyboardButton(text="📂 Папка лидера")],
             [KeyboardButton(text="🧠 Практика дня")],
             [
                 KeyboardButton(text="ℹ️ О Карине"),
@@ -63,36 +67,64 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def pd_agree_kb() -> InlineKeyboardMarkup:
+def consent_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="✅ Ознакомился(ась), продолжить",
-                    callback_data="pd_agree",
+                    text="Политика конфиденциальности",
+                    callback_data="show_policy",
                 )
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Согласие на обработку персональных данных",
+                    callback_data="show_pd_agreement",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Согласен/Согласна",
+                    callback_data="consent_yes",
+                )
+            ],
         ]
     )
 
 
-def folder_kb() -> InlineKeyboardMarkup:
+def leader_folder_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📘 Открыть тетрадь лидера", url=TETRAD_URL)],
-            [InlineKeyboardButton(text="📗 Гайд «Карта управленческой зрелости»", url=GUIDE_URL)],
-            [InlineKeyboardButton(text="📙 Чек-лист зрелого лидера", url=CHECKLIST_URL)],
-            [InlineKeyboardButton(text="📚 Подборка книг для лидеров", url=BOOKS_URL)],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_main")],
-        ]
-    )
-
-
-def karina_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Перейти в канал «Бизнес со смыслом»", url=CHANNEL_LINK)],
-            [InlineKeyboardButton(text="Записаться на консультацию", url=CONSULT_LINK)],
+            [
+                InlineKeyboardButton(
+                    text="📘 Открыть тетрадь лидера",
+                    url=TETRAD_URL,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📗 Гайд «Карта управленческой зрелости»",
+                    callback_data="leader_guide",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📙 Чек-лист зрелого лидера",
+                    callback_data="leader_checklist",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📚 Подборка книг для лидеров",
+                    callback_data="leader_books",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="↩️ В главное меню",
+                    callback_data="back_to_main",
+                )
+            ],
         ]
     )
 
@@ -100,203 +132,232 @@ def karina_kb() -> InlineKeyboardMarkup:
 def practice_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Колесо фокуса", callback_data="practice_focus_wheel")],
-            [InlineKeyboardButton(text="🧩 Делегирование — 1 шаг", callback_data="practice_delegation")],
-            [InlineKeyboardButton(text="🔍 «Откровение: точка реальности»", callback_data="practice_reality")],
+            [
+                InlineKeyboardButton(
+                    text="🎯 Колесо фокуса",
+                    callback_data="practice_focus_wheel",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🧩 Делегирование + матрица Эйзенхауэра",
+                    callback_data="practice_delegation",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🧠 Откровение: точка реальности",
+                    callback_data="practice_reality_point",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💬 Коуч-вопрос дня",
+                    callback_data="practice_question_of_day",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="↩️ В главное меню",
+                    callback_data="back_to_main",
+                )
+            ],
         ]
     )
 
 
-def back_to_practices_kb() -> InlineKeyboardMarkup:
+def about_buttons_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ К другим практикам", callback_data="practice_menu")],
+            [
+                InlineKeyboardButton(
+                    text="Перейти в канал «Бизнес со смыслом»",
+                    url=CHANNEL_URL,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Записаться на консультацию",
+                    url=CONSULT_LINK,
+                )
+            ],
         ]
     )
 
-# ===== ТЕКСТ "О КАРИНЕ" ===============================================
 
-KARINA_ABOUT_TEXT = (
-    "Карина Конорева — бизнес-архитектор, интегральный бизнес психолог и коуч лидеров.\n\n"
-    "* Профессиональный путь 20 лет от преподавателя до предпринимателя \n"
-    "* Основатель компании «Высшая Траектория»\n"
-    "* Автор проекта «Код Роста»\n"
-    "* Спикер Всемирного Бизнес-форума 2025 который внесен в книгу Рекордов Страны и Мира\n\n"
-    "* Победитель в номинации «HR эксперт года» «Лидеры Эпохи 2024» \n\n"
-    "* Лауреат Гран-При на звание «Лучший по профессии» среди специалистов в области Управления персоналом \n\n"
-    "* Бизнес-психолог, ментор управленческой зрелости, коуч лидеров и команд\n"
-    "*Эксперт по построению живых команд и системному росту бизнеса.\n"
-    "* Член Академии социальных технологий и Российского общества «Знание» \n\n"
-    "• 15+ лет опыта в создании трансформационных программ для предпринимателей и лидеров, "
-    "объединяющих бизнес-стратегии, коучинговые техники и личностный рост.\n"
-    "• Опубликовано 26 статей в научных журналах и СМИ.\n"
-    "• Автор уникальной концепции циклов бизнес-туров, где каждое путешествие — это сочетание роста, "
-    "отдыха и глубокого погружения в смыслы.\n"
-    "• Проведено 250 + часов индивидуального и командного коучинга.\n\n"
-    " Высшее образование: по психологии; педагогики; философии; \n"
-    " Дополнительное образование: в области коучинга, бизнеса, менеджмента и финансов;\n\n"
-    "ФИЛОСОФИЯ И ПОДХОД\n"
-    "⚫️Создаю живые команды и системный рост бизнеса через лидеров нового типа\n"
-    "⚫️В сотрудничестве со мной компании переходят от хаотичного роста к управляемому развитию.\n\n"
-    "⚫️Мой фокус — не просто на людях, а на системе, в которой люди становятся источником устойчивого результата.\n\n"
-    "⚫️Каждый проект — это баланс структуры и смысла, данных и энергии, цифр и человеческого потенциала.\n\n"
-    "⚫️Создаю среду, где лидер принимает решения осознанно, команда движется в едином ритме, "
-    "а бизнес растёт системно и предсказуемо. Высвобождая время собственника и увеличивая капитализацию компании "
-    "через выстроенные процессы, сильные команды и здоровую культуру.\n"
-    "Через этот бот вы получаете инструменты, которые помогают предпринимателям выходить из режима «герой-одиночка» "
-    "и строить предсказуемый бизнес с опорой на команду."
-)
+# ===== ВСПОМОГАТЕЛЬНОЕ =================================================
 
-# ===== РОУТЕР =========================================================
+async def send_safe_document(message: types.Message, file_path: str, caption: str):
+    """
+    Отправка документа так, чтобы бот не падал, если файла нет.
+    """
+    try:
+        doc = FSInputFile(file_path)
+        await message.answer_document(document=doc, caption=caption)
+    except Exception as e:
+        logging.error("Не удалось отправить файл %s: %s", file_path, e)
+        await message.answer(f"Файл пока недоступен: {caption}")
 
-router = Router()
 
-# --- /start и персональные данные ------------------------------------
+# ===== ХЕНДЛЕРЫ РЕГИСТРАЦИИ ============================================
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext) -> None:
-    await state.clear()
+async def on_start(message: types.Message, state: FSMContext):
+    await state.set_state(RegStates.waiting_consent)
+    text = (
+        "Добро пожаловать в пространство <b>«Высшая Траектория» Карины Коноревой</b>.\n\n"
+        "Перед тем как получить <b>Папку лидера</b> и практики, немного формальностей:\n"
+        "▪️ подтвердить согласие на обработку персональных данных.\n\n"
+        "Сначала посмотрите документы по кнопкам ниже, затем нажмите "
+        "«✅ Согласен/Согласна»."
+    )
+    await message.answer(text, reply_markup=consent_kb(), parse_mode="HTML")
+
+
+async def handle_policy(call: types.CallbackQuery):
+    await call.answer()
+    await send_safe_document(
+        call.message,
+        PRIVACY_POLICY_FILE,
+        "Политика конфиденциальности",
+    )
+
+
+async def handle_pd_agreement(call: types.CallbackQuery):
+    await call.answer()
+    await send_safe_document(
+        call.message,
+        PD_AGREEMENT_FILE,
+        "Согласие на обработку персональных данных",
+    )
+
+
+async def handle_consent_yes(call: types.CallbackQuery, state: FSMContext):
+    await call.answer()
+    await state.set_state(RegStates.waiting_name)
+    await call.message.answer(
+        "Спасибо! Напишите, пожалуйста, как к вам обращаться — ФИО или имя.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+async def handle_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text.strip())
+    await state.set_state(RegStates.finished)
+    user_name = message.text.strip()
 
     text = (
-        "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
-        "Перед тем как получить Папку лидера и интерактивную тетрадь, немного формальностей:\n"
-        "▪️ подтвердить согласие на обработку персональных данных.\n\n"
-        "Сначала посмотрите документы, затем нажмите кнопку «Ознакомился(ась), продолжить» ниже."
-    )
-    await message.answer(text)
-
-    # документы
-    try:
-        policy = FSInputFile(POLICY_DOC_PATH)
-        await message.answer_document(policy, caption="Политика конфиденциальности")
-    except FileNotFoundError:
-        await message.answer("⚠️ Файл политики конфиденциальности не найден на сервере.")
-
-    try:
-        consent = FSInputFile(CONSENT_DOC_PATH)
-        await message.answer_document(consent, caption="Согласие на обработку персональных данных")
-    except FileNotFoundError:
-        await message.answer("⚠️ Файл согласия на обработку персональных данных не найден на сервере.")
-
-    await message.answer(
-        "Когда посмотрите документы, нажмите кнопку ниже, чтобы продолжить.",
-        reply_markup=pd_agree_kb(),
+        f"{user_name}, благодарю! Теперь мы с вами на связи.\n\n"
+        "Чтобы получить материалы, вступите, пожалуйста, в канал "
+        "«Бизнес со смыслом» и подтвердите участие.\n\n"
+        "После вступления нажмите кнопку «Я вступил(а)»."
     )
 
-
-@router.callback_query(F.data == "pd_agree")
-async def on_pd_agree(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
-    await callback.message.answer(
-        "Отлично. Напишите, пожалуйста, как к вам обращаться — ФИ."
-    )
-    await state.set_state(Registration.waiting_for_name)
-
-# --- Имя и подписка на канал -----------------------------------------
-
-@router.message(Registration.waiting_for_name)
-async def on_name(message: Message, state: FSMContext) -> None:
-    name = (message.text or "").strip()
-    if not name:
-        await message.answer("Напишите, пожалуйста, как к вам обращаться — текстом.")
-        return
-
-    await state.update_data(user_name=name)
-
-    kb = InlineKeyboardMarkup(
+    join_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Перейти в канал «Бизнес со смыслом»", url=CHANNEL_LINK)],
-            [InlineKeyboardButton(text="✅ Я вступил(а) в канал", callback_data="joined_channel")],
+            [
+                InlineKeyboardButton(
+                    text="Перейти в канал «Бизнес со смыслом»",
+                    url=CHANNEL_URL,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Я вступил(а)",
+                    callback_data="joined_channel",
+                )
+            ],
         ]
     )
 
-    await message.answer(
-        f"{name}, благодарю! Теперь мы с вами на связи.\n\n"
-        "Чтобы получить материалы, нужно вступить в канал «Бизнес со смыслом» и подтвердить участие.\n"
-        "Перейдите в канал по кнопке ниже, затем вернитесь в бот и нажмите «Я вступил(а)».",
-        reply_markup=kb,
-    )
-    await state.set_state(Registration.waiting_for_channel_confirm)
+    await message.answer(text, reply_markup=join_kb)
 
 
-@router.callback_query(F.data == "joined_channel")
-async def on_joined_channel(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    await callback.answer()
-    user_id = callback.from_user.id
+async def handle_joined_channel(call: types.CallbackQuery, state: FSMContext, bot: Bot):
+    await call.answer()
 
-    try:
-        member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        if member.status in {
-            ChatMemberStatus.MEMBER,
-            ChatMemberStatus.ADMINISTRATOR,
-            ChatMemberStatus.CREATOR,
-        }:
-            data = await state.get_data()
-            name = data.get("user_name") or callback.from_user.full_name
-
-            await callback.message.answer(
-                f"Отлично, {name}! Папка лидера и практики теперь доступны в главном меню.\n\n"
-                "Выберите нужный раздел на клавиатуре ниже.",
-                reply_markup=main_menu_kb(),
-            )
-            await state.clear()
-            return
-
-        await callback.message.answer(
-            "Пока не вижу вас в канале. Пожалуйста, вступите и нажмите кнопку ещё раз."
-        )
-
-    except TelegramBadRequest:
-        # если по какой-то причине не смогли проверить подписку
-        await callback.message.answer(
-            "Не удалось автоматически проверить подписку на канал, "
-            "но вы всё равно можете пользоваться ботом.",
-            reply_markup=main_menu_kb(),
-        )
-        await state.clear()
-
-# --- Папка лидера -----------------------------------------------------
-
-@router.message(F.text == "📁 Папка лидера")
-async def show_leader_folder(message: Message) -> None:
-    await message.answer(
-        "📁 Папка лидера — собрала для тебя ключевые материалы для роста управленческой зрелости.",
-        reply_markup=folder_kb(),
+    member = await bot.get_chat_member(
+        chat_id=CHANNEL_USERNAME,
+        user_id=call.from_user.id,
     )
 
+    if member.status not in (
+        ChatMemberStatus.MEMBER,
+        ChatMemberStatus.ADMINISTRATOR,
+        ChatMemberStatus.OWNER,
+    ):
+        await call.message.answer(
+            "Пока не вижу вас в канале «Бизнес со смыслом».\n"
+            "Пожалуйста, вступите в канал и затем снова нажмите «Я вступил(а)».",
+        )
+        return
 
-@router.callback_query(F.data == "back_to_main")
-async def back_to_main(callback: CallbackQuery) -> None:
-    await callback.answer()
-    await callback.message.answer(
-        "Вы в главном меню. Выберите нужный раздел.",
+    await state.set_state(RegStates.finished)
+    await call.message.answer(
+        "Супер, доступ открыт! Ниже — главное меню бота.",
         reply_markup=main_menu_kb(),
     )
 
-# --- Практика дня -----------------------------------------------------
 
-@router.message(F.text == "🧠 Практика дня")
-async def practice_entry(message: Message) -> None:
+# ===== ОСНОВНОЕ МЕНЮ ===================================================
+
+async def handle_unknown_message(message: types.Message):
     await message.answer(
-        "Выбери, какая практика сегодня больше откликается:",
-        reply_markup=practice_menu_kb(),
+        "Пока я понимаю только команды из меню. Выберите нужный раздел на клавиатуре ниже.",
+        reply_markup=main_menu_kb(),
     )
 
 
-@router.callback_query(F.data == "practice_menu")
-async def practice_menu_callback(callback: CallbackQuery) -> None:
-    await callback.answer()
-    await callback.message.answer(
-        "Выбери, какая практика сегодня больше откликается:",
-        reply_markup=practice_menu_kb(),
+async def handle_leader_folder(message: types.Message):
+    await message.answer(
+        "📂 <b>Папка лидера</b>\n\n"
+        "Выберите, что открыть:",
+        reply_markup=leader_folder_kb(),
+        parse_mode="HTML",
     )
 
 
-@router.callback_query(F.data == "practice_focus_wheel")
-async def practice_focus_wheel(callback: CallbackQuery) -> None:
-    await callback.answer()
+async def handle_leader_guide(call: types.CallbackQuery):
+    await call.answer()
+    await send_safe_document(
+        call.message,
+        GUIDE_FILE,
+        "Гайд «Карта управленческой зрелости»",
+    )
+
+
+async def handle_leader_checklist(call: types.CallbackQuery):
+    await call.answer()
+    await send_safe_document(
+        call.message,
+        CHECKLIST_FILE,
+        "Чек-лист зрелого лидера",
+    )
+
+
+async def handle_leader_books(call: types.CallbackQuery):
+    await call.answer()
+    await send_safe_document(
+        call.message,
+        BOOKS_FILE,
+        "Подборка книг для лидеров",
+    )
+
+
+async def handle_practice_menu(message: types.Message):
+    await message.answer(
+        "🧠 <b>Практика дня</b>\n\n"
+        "Выберите формат, который сейчас больше всего откликается:",
+        reply_markup=practice_menu_kb(),
+        parse_mode="HTML",
+    )
+
+
+# ===== ПРАКТИКИ =======================================================
+
+async def handle_practice_focus_wheel(call: types.CallbackQuery):
+    await call.answer()
     text = (
-        "🎯 Практика дня — Колесо фокуса\n\n"
+        "🎯 <b>Практика дня — Колесо фокуса</b>\n\n"
         "Оцени по шкале от 1 до 10:\n"
         "• Стратегия\n"
         "• Команда\n"
@@ -305,82 +366,174 @@ async def practice_focus_wheel(callback: CallbackQuery) -> None:
         "Выбери сферу с минимальным баллом и сделай сегодня одно маленькое, "
         "но конкретное действие, которое поднимет её хотя бы на +1."
     )
-    await callback.message.answer(text, reply_markup=back_to_practices_kb())
+    await call.message.answer(text, parse_mode="HTML")
 
 
-@router.callback_query(F.data == "practice_delegation")
-async def practice_delegation(callback: CallbackQuery) -> None:
-    await callback.answer()
+async def handle_practice_delegation(call: types.CallbackQuery):
+    await call.answer()
     text = (
-        "🧩 Практика дня — Делегирование, один шаг\n\n"
-        "1. Выпиши 3 задачи, которые ты делаешь сам(а) по привычке.\n"
-        "2. Отметь напротив каждой: «оставить себе» / «делегировать» / «прекратить».\n"
-        "3. Выбери одну задачу для делегирования и сегодня:\n"
-        "   • выбери человека,\n"
-        "   • объясни контекст и ожидаемый результат,\n"
-        "   • договорись о сроке и формате отчёта.\n\n"
-        "Вечером задай себе вопрос: «Что оказалось проще, чем я думал(а), а что сложнее?»"
+        "🧩 <b>Практика — Делегирование + Матрица Эйзенхауэра</b>\n\n"
+        "1) Выпиши до 10 задач, которые сейчас висят на тебе.\n"
+        "2) Разложи их по матрице:\n"
+        "   🔴 Срочное / Важное — сделай лично или передай под контролем.\n"
+        "   🟢 Не срочное / Важное — запланируй и делегируй с пояснением смысла.\n"
+        "   ⚪ Срочное / Не важное — делегируй полностью.\n"
+        "   ⚫ Не срочное / Не важное — смело вычеркивай.\n\n"
+        "3) Выбери одну задачу, которую ты прямо сегодня можешь передать "
+        "человеку, который сделает хотя бы на 70% так же хорошо, как ты.\n"
+        "Это будет твоим шагом к выходу из режима «герой-одиночка»."
     )
-    await callback.message.answer(text, reply_markup=back_to_practices_kb())
+    await call.message.answer(text, parse_mode="HTML")
 
 
-@router.callback_query(F.data == "practice_reality")
-async def practice_reality(callback: CallbackQuery) -> None:
-    await callback.answer()
+async def handle_practice_reality_point(call: types.CallbackQuery):
+    await call.answer()
     text = (
-        "🔍 Практика дня — «Откровение: точка реальности»\n\n"
-        "Ответь письменно на вопросы:\n"
-        "1. Где я реально сейчас как лидер и где мой бизнес? Без приукрашиваний.\n"
-        "2. Чего я больше всего боюсь, если в ближайшие 6–12 месяцев ничего не менять?\n"
-        "3. Какой факт о бизнесе или команде мне неприятно признавать, и я от него отворачиваюсь?\n\n"
-        "Заверши: «Шаг, который я готов(а) сделать в ближайшие 24 часа, несмотря на страх: ...»"
+        "🧠 <b>Откровение: точка реальности</b>\n\n"
+        "Ответь честно письменно:\n"
+        "• Где я сейчас на самом деле как лидер и предприниматель?\n"
+        "• Чего я избегаю видеть в своём бизнесе или команде?\n"
+        "• Какая правда про меня как руководителя может быть неприятной, "
+        "но освободит энергию, если я её признаю?\n\n"
+        "В конце запиши один конкретный шаг, который ты сделаешь в ближайшие 72 часа, "
+        "исходя из этой честной точки реальности."
     )
-    await callback.message.answer(text, reply_markup=back_to_practices_kb())
+    await call.message.answer(text, parse_mode="HTML")
 
-# --- О Карине ---------------------------------------------------------
 
-@router.message(F.text == "ℹ️ О Карине")
-async def about_karina(message: Message) -> None:
+async def handle_practice_question_of_day(call: types.CallbackQuery):
+    await call.answer()
+    text = (
+        "💬 <b>Коуч-вопрос дня</b>\n\n"
+        "Представь, что через год твой бизнес стал в 2–3 раза устойчивее и спокойнее.\n"
+        "Команда работает как система, прибыль предсказуема, а ты дышишь свободнее.\n\n"
+        "Вопрос: <b>что ты перестал(а) делать</b> как руководитель, "
+        "чтобы это стало возможным?\n\n"
+        "Запиши 1–3 пункта и выбери один маленький шаг, который можешь сделать уже сегодня."
+    )
+    await call.message.answer(text, parse_mode="HTML")
+
+
+# ===== О КАРИНЕ И КОНСУЛЬТАЦИЯ ========================================
+
+async def handle_about(message: types.Message):
+    photo = None
     try:
-        photo = FSInputFile(KARINA_PHOTO_PATH)
+        photo = FSInputFile(KARINA_PHOTO_FILE)
+    except Exception as e:
+        logging.error("Не удалось загрузить фото Карины: %s", e)
+
+    about_text = (
+        "<b>Карина Конорева</b> — бизнес-архитектор, интегральный бизнес-психолог и коуч лидеров.\n\n"
+        "• Профессиональный путь 20 лет от преподавателя до предпринимателя\n"
+        "• Основатель компании «Высшая Траектория»\n"
+        "• Автор проекта «Код Роста»\n"
+        "• Спикер Всемирного Бизнес-форума 2025, внесённого в книгу рекордов страны и мира\n"
+        "• Победитель в номинации «HR эксперт года» премии «Лидеры Эпохи 2024»\n"
+        "• Лауреат Гран-При «Лучший по профессии» среди специалистов в области управления персоналом\n"
+        "• Бизнес-психолог, ментор управленческой зрелости, коуч лидеров и команд\n"
+        "• Эксперт по построению живых команд и системному росту бизнеса\n"
+        "• Член Академии социальных технологий и Российского общества «Знание»\n"
+        "• 15+ лет опыта в создании трансформационных программ для предпринимателей и лидеров\n"
+        "• 26 статей в научных журналах и СМИ\n"
+        "• 250+ часов индивидуального и командного коучинга\n\n"
+        "<b>Философия</b>\n"
+        "Создаю живые команды и системный рост бизнеса через лидеров нового типа.\n"
+        "Фокус — не только на людях, но и на системе, где люди становятся источником устойчивого результата.\n\n"
+        "Через этот бот вы получаете практические инструменты, которые помогают выйти из режима "
+        "«герой-одиночка» и строить предсказуемый бизнес с опорой на команду."
+    )
+
+    if photo:
         await message.answer_photo(
-            photo,
-            caption="Карина Конорева — бизнес-архитектор и бизнес-психолог.",
+            photo=photo,
+            caption=about_text,
+            reply_markup=about_buttons_kb(),
+            parse_mode="HTML",
         )
-        await message.answer(KARINA_ABOUT_TEXT, reply_markup=karina_kb())
-    except FileNotFoundError:
-        await message.answer(KARINA_ABOUT_TEXT, reply_markup=karina_kb())
+    else:
+        await message.answer(
+            about_text,
+            reply_markup=about_buttons_kb(),
+            parse_mode="HTML",
+        )
 
-# --- Консультация -----------------------------------------------------
 
-@router.message(F.text == "📍 Записаться на консультацию")
-async def consultation(message: Message) -> None:
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Записаться через форму", url=CONSULT_LINK)]
-        ]
-    )
+async def handle_consult(message: types.Message):
     await message.answer(
-        "Чтобы записаться на консультацию, перейдите по кнопке ниже и заполните короткую форму.",
-        reply_markup=kb,
+        "Чтобы записаться на консультацию с Кариной Коноревой, перейдите по кнопке ниже:",
+        reply_markup=about_buttons_kb(),
     )
 
-# --- Фоллбек ----------------------------------------------------------
 
-@router.message()
-async def fallback(message: Message) -> None:
-    await message.answer(
-        "Пока я понимаю только команды из меню. Выберите нужный раздел на клавиатуре ниже.",
-        reply_markup=main_menu_kb(),
+# ===== РЕГИСТРАЦИЯ ХЕНДЛЕРОВ =========================================
+
+def register_handlers(dp: Dispatcher, bot: Bot):
+    dp.message.register(on_start, CommandStart())
+
+    dp.callback_query.register(handle_policy, F.data == "show_policy")
+    dp.callback_query.register(handle_pd_agreement, F.data == "show_pd_agreement")
+    dp.callback_query.register(handle_consent_yes, F.data == "consent_yes")
+
+    dp.message.register(handle_name, RegStates.waiting_name)
+    dp.callback_query.register(handle_joined_channel, F.data == "joined_channel")
+
+    dp.message.register(handle_leader_folder, F.text == "📂 Папка лидера")
+    dp.callback_query.register(handle_leader_guide, F.data == "leader_guide")
+    dp.callback_query.register(handle_leader_checklist, F.data == "leader_checklist")
+    dp.callback_query.register(handle_leader_books, F.data == "leader_books")
+
+    dp.message.register(handle_practice_menu, F.text == "🧠 Практика дня")
+    dp.callback_query.register(
+        handle_practice_focus_wheel, F.data == "practice_focus_wheel"
+    )
+    dp.callback_query.register(
+        handle_practice_delegation, F.data == "practice_delegation"
+    )
+    dp.callback_query.register(
+        handle_practice_reality_point, F.data == "practice_reality_point"
+    )
+    dp.callback_query.register(
+        handle_practice_question_of_day, F.data == "practice_question_of_day"
     )
 
-# ===== ЗАПУСК =========================================================
+    dp.message.register(handle_about, F.text == "ℹ️ О Карине")
+    dp.message.register(handle_consult, F.text == "📍 Записаться на консультацию")
 
-async def main() -> None:
-    bot = Bot(TOKEN)
+    dp.message.register(handle_unknown_message)
+
+
+# ===== ЗАПУСК НА RENDER (WEB + POLLING) ================================
+
+async def on_startup(bot: Bot):
+    logging.info("Бот запущен")
+
+
+async def main():
+    bot = Bot(token=TOKEN)
     dp = Dispatcher()
-    dp.include_router(router)
-    await dp.start_polling(bot)
+    register_handlers(dp, bot)
+
+    app = web.Application()
+
+    async def handle(request):
+        return web.Response(text="OK")
+
+    app.router.add_get("/", handle)
+
+    async def on_startup_app(app_):
+        await on_startup(bot)
+
+    app.on_startup.append(on_startup_app)
+
+    async def runner():
+        await dp.start_polling(bot)
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(runner())
+
+    web.run_app(app, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+
 
 if __name__ == "__main__":
     asyncio.run(main())
