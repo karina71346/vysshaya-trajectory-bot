@@ -3,73 +3,63 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, F, types
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode, ChatMemberStatus
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import (
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
+    Message,
+    CallbackQuery,
     ReplyKeyboardMarkup,
     KeyboardButton,
-    ReplyKeyboardRemove,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    FSInputFile,
 )
-from aiogram.enums import ChatMemberStatus, ParseMode
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
-from aiogram.client.default import DefaultBotProperties
-
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# ================== НАСТРОЙКИ ==================
+# ============ НАСТРОЙКИ ============
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-# Точный @ канала, где бот ДОБАВЛЕН АДМИНОМ
+if not TOKEN:
+    raise RuntimeError("Переменная окружения BOT_TOKEN не задана")
+
+# username канала и ссылка на канал
 CHANNEL_USERNAME = "@businesskodrosta"
-# Ссылка-приглашение в канал (кнопка «Перейти в канал»)
 CHANNEL_LINK = "https://t.me/businesskodrosta"
 
 # Ссылка на интерактивную тетрадь
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
 
-# ИМЕНА ЛОКАЛЬНЫХ ФАЙЛОВ (они должны лежать рядом с bot.py на Render)
-PD_POLICY_PATH = "politika_konfidencialnosti.pdf"
-PD_AGREEMENT_PATH = "soglasie_na_obrabotku_pd.pdf"
+# Ссылка на форму записи на консультацию
+CONSULT_LINK = "https://forms.yandex.ru/u/69178642068ff0624a625f20/"
 
-GUIDE_PATH = "karta_upravlencheskoy_zrelosti.pdf"
-CHECKLIST_PATH = "checklist_zrelogo_lidera.pdf"
-BOOKS_PATH = "podborca_knig_liderstvo.pdf"
+# Имена файлов (НЕ МЕНЯТЬ)
+PD_POLICY_FILE = "politika_konfidencialnosti.pdf"
+PD_AGREEMENT_FILE = "soglasie_na_obrabotku_pd.pdf"
+GUIDE_FILE = "karta_upravlencheskoy_zrelosti.pdf"
+CHECKLIST_FILE = "checklist_zrelogo_lidera.pdf"
+BOOKS_FILE = "podborca_knig_liderstvo.pdf"
 
-# Фото Карины (локальный файл)
-KARINA_PHOTO_PATH = "KARINA_PHOTO_URL.jpg"
-
-# Форма на консультацию
-CONSULT_LINK = "https://forms.yandex.ru/..."  # <-- подставь свою ссылку
-
-# ================== СОСТОЯНИЯ ==================
+# Фото Карина
+KARINA_PHOTO_FILE = "KARINA_PHOTO_URL.jpg"
 
 
-class Form(StatesGroup):
-    waiting_for_agreement = State()
+# ============ СОСТОЯНИЯ ============
+
+class Onboarding(StatesGroup):
+    waiting_for_agree = State()
     waiting_for_name = State()
-    waiting_for_subscription = State()
-    main_menu = State()
 
 
-# ================== ОБЪЕКТЫ БОТА ==================
-
-bot = Bot(
-    TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
-)
-dp = Dispatcher()
-
-
-# ================== ВСПОМОГАТЕЛЬНЫЕ КЛАВИАТУРЫ ==================
-
+# ============ КЛАВИАТУРЫ ============
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
-    """Главное меню после подтверждения подписки."""
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📁 Папка лидера")],
@@ -83,278 +73,289 @@ def main_menu_kb() -> ReplyKeyboardMarkup:
     )
 
 
-def practices_kb() -> InlineKeyboardMarkup:
-    """Список практик дня."""
+def practices_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Колесо фокуса", callback_data="p_focus")],
-            [InlineKeyboardButton(text="📤 Микроделегирование", callback_data="p_microdeleg")],
-            [InlineKeyboardButton(text="💡 Откровение: точка реальности", callback_data="p_reality")],
-            [InlineKeyboardButton(text="🚀 Микрошаг к Высшей траектории", callback_data="p_microstep")],
+            [InlineKeyboardButton(text="🎯 Колесо фокуса", callback_data="pr_focus")],
+            [InlineKeyboardButton(text="📤 Микроделегирование", callback_data="pr_deleg")],
+            [InlineKeyboardButton(text="💡 Откровение: точка реальности", callback_data="pr_reality")],
+            [InlineKeyboardButton(text="🚀 Микрошаг к Высшей траектории", callback_data="pr_step")],
         ]
     )
 
 
-def back_to_practices_kb() -> InlineKeyboardMarkup:
-    """Кнопка возврата к списку практик."""
+def leader_folder_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ К другим практикам", callback_data="back_to_practices")]
+            [InlineKeyboardButton(text="📘 Открыть тетрадь лидера", url=TETRAD_URL)],
+            [InlineKeyboardButton(text="📗 Гайд «Карта управленческой зрелости»",
+                                  callback_data="open_guide")],
+            [InlineKeyboardButton(text="📙 Чек-лист зрелого лидера",
+                                  callback_data="open_checklist")],
+            [InlineKeyboardButton(text="📚 Подборка книг для лидеров",
+                                  callback_data="open_books")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_menu")],
         ]
     )
 
 
-# ================== ТЕКСТЫ ==================
-
-ABOUT_TEXT = """
-Карина Конорева — бизнес-архитектор, интегральный бизнес-психолог и коуч лидеров.
-
-Помогаю собственникам выходить из режима «героя-одиночки» и строить предсказуемый бизнес с опорой на команду.
-
-• Профессиональный путь более 20 лет — от преподавателя до предпринимателя.
-• Основатель компании «Высшая Траектория».
-• Автор проекта «Бизнес-маршруты со смыслом» для лидеров и команд.
-• Победитель премии «Лидеры Эпохи 2024» в номинации «HR-эксперт года».
-• Лауреат Гран-при «Лучший по профессии» в управлении персоналом.
-• 26 статей в научных журналах и СМИ.
-• 250+ часов индивидуального и командного коучинга.
-
-ФИЛОСОФИЯ
-Создаю живые команды и системный рост бизнеса через лидеров нового типа.
-Фокус — не только на людях, но и на системе, где люди становятся источником устойчивого результата.
-
-Через этот бот вы получаете практические инструменты, которые помогают выйти из режима «герой-одиночка» и строить предсказуемый бизнес с опорой на команду.
-""".strip()
+def about_karina_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Перейти в канал «Бизнес со смыслом»",
+                url=CHANNEL_LINK
+            )],
+            [InlineKeyboardButton(
+                text="Записаться на консультацию",
+                url=CONSULT_LINK
+            )],
+        ]
+    )
 
 
-# ================== ПРОВЕРКА ПОДПИСКИ ==================
+def agree_pd_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Согласен/Согласна", callback_data="agree_pd")]
+        ]
+    )
 
 
-async def is_subscribed(user_id: int) -> bool:
+def join_channel_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text="Перейти в канал «Бизнес со смыслом»",
+                url=CHANNEL_LINK
+            )],
+            [InlineKeyboardButton(text="Я вступил(а)", callback_data="joined_channel")],
+        ]
+    )
+
+
+# ============ ПРОВЕРКА ПОДПИСКИ ============
+
+async def is_user_subscribed(bot: Bot, user_id: int) -> bool:
     """
-    Проверка подписки на канал.
-    ВАЖНО: бот должен быть админом в CHANNEL_USERNAME.
+    Проверяем, состоит ли пользователь в канале.
     """
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
-    except TelegramForbiddenError:
-        logging.warning("Бот не имеет прав на канал %s", CHANNEL_USERNAME)
+    except TelegramBadRequest as e:
+        # Ошибка типа "chat not found" и т.п.
+        logger.error("BadRequest при проверке подписки: %s", e)
         return False
-    except TelegramBadRequest:
-        logging.warning("Проблема с CHANNEL_USERNAME = %s", CHANNEL_USERNAME)
+    except TelegramForbiddenError as e:
+        # Если бота выгнали из канала или нет прав
+        logger.error("Forbidden при проверке подписки: %s", e)
+        return False
+    except Exception as e:
+        logger.error("Неизвестная ошибка при проверке подписки: %s", e)
         return False
 
     return member.status in {
         ChatMemberStatus.MEMBER,
         ChatMemberStatus.ADMINISTRATOR,
-        ChatMemberStatus.OWNER,
+        ChatMemberStatus.CREATOR,
     }
 
 
-# ================== /start ==================
+# ============ ХЕНДЛЕРЫ ============
+
+dp = Dispatcher()
 
 
 @dp.message(CommandStart())
-async def cmd_start(message: types.Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext):
+    """
+    /start — отправляем документы по ПД и просим подтвердить.
+    Главное меню НЕ показываем.
+    """
     await state.clear()
+    await state.set_state(Onboarding.waiting_for_agree)
 
-    # Прячем меню, чтобы не светилось заранее
-    await message.answer(
-        "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.",
-        reply_markup=ReplyKeyboardRemove(),
-    )
-
-    text = (
+    welcome_text = (
+        "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
         "Перед тем как получить Папку лидера и практики, чуть-чуть формальностей:\n"
         "▪️ подтвердить согласие на обработку персональных данных.\n\n"
         "Сначала посмотрите документы по кнопкам ниже, затем нажмите «✅ Согласен/Согласна»."
     )
-    await message.answer(text)
 
-    # Отправляем два PDF с ПД
+    await message.answer(welcome_text, reply_markup=types.ReplyKeyboardRemove())
+
+    # Отправляем два PDF-документа
     await message.answer_document(
-        types.FSInputFile(PD_POLICY_PATH),
+        FSInputFile(PD_POLICY_FILE),
         caption="Политика конфиденциальности",
     )
+
     await message.answer_document(
-        types.FSInputFile(PD_AGREEMENT_PATH),
+        FSInputFile(PD_AGREEMENT_FILE),
         caption="Согласие на обработку персональных данных",
     )
 
-    agree_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Согласен/Согласна", callback_data="agree_pd")]
-        ]
-    )
     await message.answer(
         "Когда посмотрите документы, нажмите кнопку ниже, чтобы продолжить.",
-        reply_markup=agree_kb,
+        reply_markup=agree_pd_kb(),
     )
 
-    await state.set_state(Form.waiting_for_agreement)
+
+@dp.message(Onboarding.waiting_for_agree)
+async def wait_agree(message: Message):
+    """
+    Пользователь пишет что-то до того, как нажал «Согласен/Согласна».
+    Меню не показываем, мягко возвращаем к шагу.
+    """
+    await message.answer(
+        "Пожалуйста, сначала посмотрите документы и нажмите кнопку «✅ Согласен/Согласна» под ними."
+    )
 
 
-# ================== СОГЛАСИЕ НА ПД ==================
-
-
-@dp.callback_query(F.data == "agree_pd", Form.waiting_for_agreement)
-async def agree_pd(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(F.data == "agree_pd")
+async def on_agree_pd(callback: CallbackQuery, state: FSMContext):
+    """
+    Пользователь нажал «Согласен/Согласна» — просим имя.
+    """
+    await state.set_state(Onboarding.waiting_for_name)
+    await callback.message.answer(
+        "Отлично. Напишите, пожалуйста, как к вам обращаться — ФИ."
+    )
     await callback.answer()
-    await callback.message.answer("Отлично. Напишите, пожалуйста, как к вам обращаться — ФИ.")
-    await state.set_state(Form.waiting_for_name)
 
 
-# ================== ИМЯ ПОЛЬЗОВАТЕЛЯ ==================
+@dp.message(Onboarding.waiting_for_name)
+async def get_name(message: Message, state: FSMContext):
+    """
+    Получаем имя и отправляем инструкцию по вступлению в канал.
+    """
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("Пожалуйста, напишите, как к вам обращаться — ФИ.")
+        return
 
-
-@dp.message(Form.waiting_for_name)
-async def save_name(message: types.Message, state: FSMContext):
-    full_name = message.text.strip()
-    await state.update_data(full_name=full_name)
+    await state.clear()
 
     text = (
-        f"Спасибо, {full_name}! Теперь мы с вами на связи.\n\n"
-        "Чтобы получить материалы, нужно вступить в канал «Бизнес со смыслом» и подтвердить участие:\n\n"
+        f"Спасибо, {name}! Теперь мы с вами на связи.\n\n"
+        "Чтобы получить материалы, нужно вступить в канал «Бизнес со смыслом» "
+        "и подтвердить участие.\n\n"
         "1️⃣ Нажмите кнопку «Перейти в канал».\n"
         "2️⃣ Вступите в канал.\n"
         "3️⃣ Вернитесь в бот и нажмите «Я вступил(а)»."
     )
 
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Перейти в канал «Бизнес со смыслом»",
-                    url=CHANNEL_LINK,
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Я вступил(а)",
-                    callback_data="joined_channel",
-                )
-            ],
-        ]
-    )
-
-    await message.answer(text, reply_markup=kb)
-    await state.set_state(Form.waiting_for_subscription)
+    await message.answer(text, reply_markup=join_channel_kb())
 
 
-# ================== ПРОВЕРКА ПОДПИСКИ ==================
-
-
-@dp.callback_query(F.data == "joined_channel", Form.waiting_for_subscription)
-async def joined_channel(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
+@dp.callback_query(F.data == "joined_channel")
+async def on_joined_channel(callback: CallbackQuery, bot: Bot):
+    """
+    Обработка нажатия «Я вступил(а)» — проверяем подписку.
+    Если всё ок, показываем главное меню.
+    """
     user_id = callback.from_user.id
 
-    if not await is_subscribed(user_id):
-        await callback.message.answer(
-            "Пока Telegram не видит вас в канале.\n"
-            "Убедитесь, что вы подписаны именно на канал «Бизнес со смыслом» "
-            "и попробуйте ещё раз чуть позже."
+    is_member = await is_user_subscribed(bot, user_id)
+
+    if not is_member:
+        # Показываем алерт, меню НЕ выдаём
+        await callback.answer(
+            "Не удалось проверить подписку или вы ещё не вступили в канал. "
+            "Проверьте, что вы действительно подписались, и попробуйте ещё раз.",
+            show_alert=True,
         )
         return
 
+    # Убираем старую инлайн-клавиатуру
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest:
+        pass
+
     await callback.message.answer(
-        "Отлично! Доступ к материалам открыт. Выберите раздел в меню ниже 👇",
+        "Отлично! Доступ к материалам открыт. Ниже появилось главное меню 👇",
         reply_markup=main_menu_kb(),
     )
-    await state.set_state(Form.main_menu)
+    await callback.answer()
 
 
-# ================== ПАПКА ЛИДЕРА ==================
+# ---------- ПАПКА ЛИДЕРА ----------
 
-
-@dp.message(F.text == "📁 Папка лидера", Form.main_menu)
-async def folder_leader(message: types.Message):
+@dp.message(F.text == "📁 Папка лидера")
+async def folder_handler(message: Message):
     text = (
-        "📂 *Папка лидера*\n\n"
-        "Здесь собраны ключевые материалы, которые помогают навести порядок "
-        "в управлении и двигаться к предсказуемому росту."
+        "Здесь собраны ключевые материалы, которые помогают навести порядок в управлении "
+        "и двигаться к предсказуемому росту."
     )
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📘 Открыть тетрадь лидера",
-                    url=TETRAD_URL,
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📗 Гайд «Карта управленческой зрелости»",
-                    callback_data="open_guide",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📙 Чек-лист зрелого лидера",
-                    callback_data="open_checklist",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📚 Подборка книг для лидеров",
-                    callback_data="open_books",
-                )
-            ],
-        ]
-    )
-
-    await message.answer(text, reply_markup=kb)
+    await message.answer(text, reply_markup=leader_folder_kb())
 
 
 @dp.callback_query(F.data == "open_guide")
-async def send_guide(callback: types.CallbackQuery):
-    await callback.answer()
+async def send_guide(callback: CallbackQuery):
     await callback.message.answer_document(
-        types.FSInputFile(GUIDE_PATH),
+        FSInputFile(GUIDE_FILE),
         caption="Гайд «Карта управленческой зрелости»",
     )
+    await callback.answer()
 
 
 @dp.callback_query(F.data == "open_checklist")
-async def send_checklist(callback: types.CallbackQuery):
-    await callback.answer()
+async def send_checklist(callback: CallbackQuery):
     await callback.message.answer_document(
-        types.FSInputFile(CHECKLIST_PATH),
+        FSInputFile(CHECKLIST_FILE),
         caption="Чек-лист зрелого лидера",
     )
+    await callback.answer()
 
 
 @dp.callback_query(F.data == "open_books")
-async def send_books(callback: types.CallbackQuery):
-    await callback.answer()
+async def send_books(callback: CallbackQuery):
     await callback.message.answer_document(
-        types.FSInputFile(BOOKS_PATH),
+        FSInputFile(BOOKS_FILE),
         caption="Подборка книг для лидеров",
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "back_to_menu")
+async def back_to_menu(callback: CallbackQuery):
+    await callback.message.answer(
+        "Вы вернулись в главное меню.", reply_markup=main_menu_kb()
+    )
+    await callback.answer()
+
+
+# ---------- ПРАКТИКА ДНЯ ----------
+
+@dp.message(F.text == "🧠 Практика дня")
+async def practice_menu(message: Message):
+    await message.answer(
+        "Выбери практику на сегодня:", reply_markup=practices_menu_kb()
     )
 
 
-# ================== ПРАКТИКА ДНЯ ==================
-
-
-@dp.message(F.text == "🧠 Практика дня", Form.main_menu)
-async def practice_day(message: types.Message):
-    await message.answer("Выбери практику на сегодня:", reply_markup=practices_kb())
+async def send_practice_text(callback: CallbackQuery, title: str, body: str):
+    kb_back = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К другим практикам", callback_data="back_to_practices")]
+        ]
+    )
+    await callback.message.answer(f"🎯 Практика дня — {title}\n\n{body}", reply_markup=kb_back)
+    await callback.answer()
 
 
 @dp.callback_query(F.data == "back_to_practices")
-async def back_to_practices(callback: types.CallbackQuery):
-    await callback.answer()
+async def back_to_practices(callback: CallbackQuery):
     await callback.message.answer(
-        "Выбери практику на сегодня:", reply_markup=practices_kb()
+        "Выбери практику на сегодня:", reply_markup=practices_menu_kb()
     )
-
-
-@dp.callback_query(F.data == "p_focus")
-async def practice_focus(callback: types.CallbackQuery):
     await callback.answer()
-    text = (
-        "🎯 *Практика дня — Колесо фокуса*\n\n"
+
+
+@dp.callback_query(F.data == "pr_focus")
+async def pr_focus(callback: CallbackQuery):
+    body = (
         "Оцени по шкале от 1 до 10:\n"
         "• Стратегия\n"
         "• Команда\n"
@@ -363,123 +364,102 @@ async def practice_focus(callback: types.CallbackQuery):
         "Выбери сферу с минимальным баллом и сделай сегодня одно маленькое, "
         "но конкретное действие, которое поднимет её хотя бы на +1."
     )
-    await callback.message.answer(text, reply_markup=back_to_practices_kb())
+    await send_practice_text(callback, "Колесо фокуса", body)
 
 
-@dp.callback_query(F.data == "p_microdeleg")
-async def practice_microdeleg(callback: types.CallbackQuery):
-    await callback.answer()
-    text = (
-        "📤 *Практика дня — Микроделегирование*\n\n"
-        "1. Выпиши 5 задач, которые ты делаешь сам(а), но их можно поручить другим.\n"
-        "2. Выбери одну самую безопасную и простую.\n"
-        "3. Передай её человеку из команды с понятным критерием результата и сроком.\n"
-        "4. Отслеживай не идеальность, а факт передачи — это уже шаг к разгрузке."
+@dp.callback_query(F.data == "pr_deleg")
+async def pr_deleg(callback: CallbackQuery):
+    body = (
+        "Вспомни одну задачу, которую ты всё ещё делаешь сам(а), "
+        "хотя её можно передать.\n\n"
+        "1️⃣ Определи, кому в команде она ближе всего по зоне ответственности.\n"
+        "2️⃣ Сформулируй ожидаемый результат и критерии успеха.\n"
+        "3️⃣ Передай задачу и назначь контрольную точку.\n\n"
+        "Вечером зафиксируй, что получилось и что можно улучшить в следующей передаче."
     )
-    await callback.message.answer(text, reply_markup=back_to_practices_kb())
+    await send_practice_text(callback, "Микроделегирование", body)
 
 
-@dp.callback_query(F.data == "p_reality")
-async def practice_reality(callback: types.CallbackQuery):
-    await callback.answer()
-    text = (
-        "💡 *Практика дня — Откровение: точка реальности*\n\n"
-        "Ответь честно на 3 вопроса:\n"
-        "1) Где я сейчас как лидер по шкале от 1 до 10?\n"
-        "2) Что в моей управленческой привычке мешает расти компании?\n"
-        "3) Какое одно решение я могу принять уже сегодня, чтобы перестать тормозить рост?\n\n"
-        "Запиши ответы и вернись к ним через неделю."
+@dp.callback_query(F.data == "pr_reality")
+async def pr_reality(callback: CallbackQuery):
+    body = (
+        "Ответь честно на три вопроса:\n"
+        "1. Что в моём бизнесе сейчас работает хуже всего?\n"
+        "2. Какую цену я плачу за то, что это долго не решаю?\n"
+        "3. Какой первый шаг я могу сделать в течение 48 часов?\n\n"
+        "Запиши ответы и выбери один конкретный шаг — сделай его сегодня."
     )
-    await callback.message.answer(text, reply_markup=back_to_practices_kb())
+    await send_practice_text(callback, "Откровение: точка реальности", body)
 
 
-@dp.callback_query(F.data == "p_microstep")
-async def practice_microstep(callback: types.CallbackQuery):
-    await callback.answer()
-    text = (
-        "🚀 *Практика дня — Микрошаг к Высшей траектории*\n\n"
-        "Представь свою компанию через 3 года, если всё сложится оптимально.\n"
-        "• Как выглядит команда?\n"
-        "• Как выглядит твоя роль?\n"
-        "• Какие ключевые решения уже приняты?\n\n"
-        "Теперь выбери один микрошаг, который можно сделать за 15–30 минут сегодня, "
-        "чтобы приблизиться к этой картинке. И сделай его в ближайшие 24 часа."
+@dp.callback_query(F.data == "pr_step")
+async def pr_step(callback: CallbackQuery):
+    body = (
+        "Представь свою «Высшую траекторию» на год вперёд: каким ты хочешь видеть бизнес и себя?\n\n"
+        "Теперь сформулируй один микрошаг, который приблизит тебя к этой картинке "
+        "на 1% уже сегодня. Сделай его и зафиксируй результат в тетради лидера."
     )
-    await callback.message.answer(text, reply_markup=back_to_practices_kb())
+    await send_practice_text(callback, "Микрошаг к Высшей траектории", body)
 
 
-# ================== О КАРИНЕ ==================
+# ---------- О КАРИНЕ ----------
 
+@dp.message(F.text == "ℹ️ О Карине")
+async def about_karina(message: Message):
+    caption = (
+        "Карина Конорева — бизнес-архитектор, интегральный бизнес-психолог и коуч лидеров.\n\n"
+        "Помогаю собственникам выходить из режима «героя-одиночки» и строить предсказуемый "
+        "бизнес с опорой на живую, сильную команду.\n\n"
+        "Через этот бот вы получаете практические инструменты, которые помогают навести порядок "
+        "в управлении, выстроить команду и двигаться к устойчивому росту."
+    )
 
-@dp.message(F.text == "ℹ️ О Карине", Form.main_menu)
-async def about_karina(message: types.Message):
     await message.answer_photo(
-        types.FSInputFile(KARINA_PHOTO_PATH),
-        caption="Карина Конорева — бизнес-архитектор, интегральный бизнес-психолог и коуч лидеров.",
+        FSInputFile(KARINA_PHOTO_FILE),
+        caption=caption,
+        reply_markup=about_karina_kb(),
     )
 
+
+# ---------- ЗАПИСЬ НА КОНСУЛЬТАЦИЮ ----------
+
+@dp.message(F.text == "📍 Записаться на консультацию")
+async def consult_handler(message: Message):
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Перейти в канал «Бизнес со смыслом»",
-                    url=CHANNEL_LINK,
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="Записаться на консультацию",
-                    url=CONSULT_LINK,
-                )
-            ],
-        ]
-    )
-
-    await message.answer(ABOUT_TEXT, reply_markup=kb)
-
-
-# ================== ЗАПИСЬ НА КОНСУЛЬТАЦИЮ ==================
-
-
-@dp.message(F.text == "📍 Записаться на консультацию", Form.main_menu)
-async def consult(message: types.Message):
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Перейти к форме записи",
-                    url=CONSULT_LINK,
-                )
-            ]
+            [InlineKeyboardButton(
+                text="Перейти к форме записи",
+                url=CONSULT_LINK,
+            )]
         ]
     )
     await message.answer(
-        "Чтобы записаться на консультацию, перейдите по ссылке ниже:",
+        "Чтобы записаться на консультацию, перейдите по ссылке:",
         reply_markup=kb,
     )
 
 
-# ================== НЕИЗВЕСТНЫЕ СООБЩЕНИЯ ==================
-
+# ---------- ЛЮБОЙ ДРУГОЙ ТЕКСТ (ПОСЛЕ ОНБОРДИНГА) ----------
 
 @dp.message()
-async def unknown_message(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state == Form.main_menu.state:
-        await message.answer(
-            "Пока я понимаю только команды из меню. "
-            "Выберите нужный раздел на клавиатуре ниже 👇"
-        )
-    else:
-        await message.answer(
-            "Чтобы продолжить работу, используйте кнопки или введите команду /start."
-        )
+async def fallback(message: Message):
+    """
+    Любой текст вне онбординга.
+    """
+    await message.answer(
+        "Пока я понимаю только команды из меню. "
+        "Выберите нужный раздел на клавиатуре ниже или введите /start.",
+        reply_markup=main_menu_kb(),
+    )
 
 
-# ================== ЗАПУСК ==================
-
+# ============ ЗАПУСК ============
 
 async def main():
+    bot = Bot(
+        token=TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     await dp.start_polling(bot)
 
 
