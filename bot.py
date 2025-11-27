@@ -16,21 +16,21 @@ from aiogram.types import (
     InlineKeyboardButton,
     ReplyKeyboardMarkup,
     KeyboardButton,
+    ReplyKeyboardRemove,
     FSInputFile,
 )
 
-# ===== НАСТРОЙКИ ======================================================
+# ================= НАСТРОЙКИ ======================
 
 TOKEN = os.getenv("BOT_TOKEN")
 
-CHANNEL_USERNAME = "@businesskodrosta"  # юзернейм канала
+CHANNEL_USERNAME = "@businesskodrosta"
 CHANNEL_LINK = f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}"
 
-# Ссылки
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
-CONSULT_LINK = "https://forms.yandex.ru/your-form-id/"  # 👉 сюда вставь свою ссылку
+CONSULT_LINK = "https://forms.yandex.ru/your-form-id/"  # здесь твоя форма
 
-# Файлы (имена ДОЛЖНЫ совпадать с файлами в репозитории)
+# Файлы (ИМЕНА ДОЛЖНЫ СОВПАДАТЬ С ТЕМ, ЧТО В РЕПО)
 POLICY_PATH = "politika_konfidencialnosti.pdf"
 CONSENT_PATH = "soglasie_na_obrabotku_pd.pdf"
 
@@ -40,7 +40,6 @@ BOOKS_PATH = "podborca_knig_liderstvo.pdf"
 
 KARINA_PHOTO_PATH = "KARINA_PHOTO_URL.jpg"
 
-# Текст для блока «О Карине» — можешь поправить под себя
 KARINA_BIO_TEXT = (
     "Карина Конорева — бизнес-архитектор, интегральный бизнес-психолог и коуч лидеров.\n"
     "Помогаю собственникам выходить из режима «героя-одиночки» и строить предсказуемый бизнес "
@@ -55,13 +54,13 @@ KARINA_BIO_TEXT = (
     "которые создают предсказуемый результат, опираясь не только на себя, но и на систему."
 )
 
-# ===== FSM ============================================================
+# ================= FSM ===========================
 
 class Form(StatesGroup):
     waiting_for_name = State()
 
 
-# ===== КЛАВИАТУРЫ =====================================================
+# ================= КЛАВИАТУРЫ ====================
 
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
@@ -144,23 +143,24 @@ def back_to_practices_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-# ===== РОУТЕР =========================================================
+# ================= РОУТЕР ========================
 
 router = Router()
 
 
-# /start — приветствие + два PDF + кнопка согласия
+# -------- /start --------
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
 
+    # ВАЖНО: убираем старую клавиатуру, чтобы меню не торчало сразу
     welcome_text = (
         "Добро пожаловать в пространство «Высшая Траектория» Карины Коноревой.\n\n"
         "Перед тем как получить Папку лидера и практики, чуть-чуть формальностей:\n"
         "▪ подтвердить согласие на обработку персональных данных.\n\n"
         "Сначала посмотрите документы, затем нажмите кнопку «✅ Согласен/Согласна» ниже."
     )
-    await message.answer(welcome_text)
+    await message.answer(welcome_text, reply_markup=ReplyKeyboardRemove())
 
     # Отправляем документы
     await message.answer_document(
@@ -183,7 +183,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     )
 
 
-# Нажали «Согласен/Согласна» → спрашиваем имя
+# -------- Нажали «Согласен/Согласна» --------
 @router.callback_query(F.data == "consent_yes")
 async def consent_yes(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
@@ -193,7 +193,7 @@ async def consent_yes(callback: CallbackQuery, state: FSMContext) -> None:
     )
 
 
-# Пришло имя → отправляем инструкцию по каналу
+# -------- Обработка имени --------
 @router.message(Form.waiting_for_name)
 async def process_name(message: Message, state: FSMContext) -> None:
     name = (message.text or "").strip()
@@ -223,7 +223,7 @@ async def process_name(message: Message, state: FSMContext) -> None:
     await message.answer(text, reply_markup=kb)
 
 
-# Пользователь нажал «Я вступил(а)» → проверяем подписку и показываем меню
+# -------- Проверка подписки --------
 @router.callback_query(F.data == "joined_channel")
 async def joined_channel(callback: CallbackQuery, bot: Bot) -> None:
     user_id = callback.from_user.id
@@ -231,9 +231,11 @@ async def joined_channel(callback: CallbackQuery, bot: Bot) -> None:
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
     except Exception as e:
+        # Любая ошибка проверки — пишем в лог и даём понятный текст
         logging.exception("Ошибка проверки подписки: %r", e)
         await callback.message.answer(
-            "Не удалось проверить подписку. Попробуйте ещё раз чуть позже."
+            "Не удалось проверить подписку. "
+            "Убедитесь, что бот добавлен в канал и повторите попытку чуть позже."
         )
         await callback.answer()
         return
@@ -256,7 +258,7 @@ async def joined_channel(callback: CallbackQuery, bot: Bot) -> None:
         )
 
 
-# ===== ПАПКА ЛИДЕРА ===================================================
+# ================= ПАПКА ЛИДЕРА ==================
 
 @router.message(F.text == "📁 Папка лидера")
 async def folder_leader(message: Message) -> None:
@@ -288,13 +290,20 @@ async def send_checklist(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "leader_books")
 async def send_books(callback: CallbackQuery) -> None:
     await callback.answer()
-    await callback.message.answer_document(
-        FSInputFile(BOOKS_PATH),
-        caption="Подборка книг для лидеров",
-    )
+    try:
+        await callback.message.answer_document(
+            FSInputFile(BOOKS_PATH),
+            caption="Подборка книг для лидеров",
+        )
+    except Exception as e:
+        logging.exception("Не удалось отправить подборку книг: %r", e)
+        await callback.message.answer(
+            "Не удалось отправить файл с книгами. Проверь, что файл "
+            f"«{BOOKS_PATH}» лежит рядом с bot.py и имя совпадает."
+        )
 
 
-# ===== ПРАКТИКА ДНЯ ===================================================
+# ================= ПРАКТИКА ДНЯ ==================
 
 @router.message(F.text == "🧠 Практика дня")
 async def practice_menu(message: Message) -> None:
@@ -362,10 +371,11 @@ async def practice_microstep(callback: CallbackQuery) -> None:
     await callback.message.answer(text, reply_markup=back_to_practices_keyboard())
 
 
-# ===== О КАРИНЕ =======================================================
+# ================= О КАРИНЕ ======================
 
 @router.message(F.text == "ℹ️ О Карине")
 async def about_karina(message: Message) -> None:
+    # сначала пытаемся отправить фото, если вдруг файла нет — просто текст
     try:
         photo = FSInputFile(KARINA_PHOTO_PATH)
         await message.answer_photo(photo, caption=KARINA_BIO_TEXT)
@@ -393,7 +403,7 @@ async def about_karina(message: Message) -> None:
     )
 
 
-# ===== ЗАПИСЬ НА КОНСУЛЬТАЦИЮ ========================================
+# ================= ЗАПИСЬ НА КОНСУЛЬТАЦИЮ =======
 
 @router.message(F.text == "📍 Записаться на консультацию")
 async def consult(message: Message) -> None:
@@ -412,7 +422,7 @@ async def consult(message: Message) -> None:
     )
 
 
-# ===== ОБРАБОТКА ПРОЧИХ СООБЩЕНИЙ ====================================
+# ================= ПРОЧИЙ ТЕКСТ ==================
 
 @router.message(StateFilter(None))
 async def fallback(message: Message) -> None:
@@ -422,7 +432,7 @@ async def fallback(message: Message) -> None:
     )
 
 
-# ===== ЗАПУСК =========================================================
+# ================= ЗАПУСК ========================
 
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
