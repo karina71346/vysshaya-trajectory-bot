@@ -28,7 +28,7 @@ CHANNEL_USERNAME = "@businesskodrosta"
 CHANNEL_LINK = f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}"
 
 TETRAD_URL = "https://tetrad-lidera.netlify.app/"
-CONSULT_LINK = "https://forms.yandex.ru/your-form-id/"  # здесь твоя форма
+CONSULT_LINK = "https://forms.yandex.ru/admin/69178642068ff0624a625f20/settings?tab=access&preview=true"  # здесь твоя форма
 
 # Файлы (ИМЕНА ДОЛЖНЫ СОВПАДАТЬ С ТЕМ, ЧТО В РЕПО)
 POLICY_PATH = "politika_konfidencialnosti.pdf"
@@ -38,15 +38,18 @@ GUIDE_PATH = "karta_upravlencheskoy_zrelosti.pdf"
 CHECKLIST_PATH = "checklist_zrelogo_lidera.pdf"
 BOOKS_PATH = "podborca_knig_liderstvo.pdf"
 
-KARINA_PHOTO_PATH = "KARINA_PHOTO_URL.jpg"
+KARINA_PHOTO_PATH = "karina_photo.jpg"
 
 KARINA_BIO_TEXT = (
     "Карина Конорева — бизнес-архитектор, интегральный бизнес-психолог и коуч лидеров.\n"
     "Помогаю собственникам выходить из режима «героя-одиночки» и строить предсказуемый бизнес "
     "с опорой на команду.\n\n"
     "Опыт:\n"
-    "• 20+ лет пути от преподавателя до предпринимателя.\n"
-    "• 18 лет практики в роли интегрального бизнес-психолога.\n"
+    "• Профессиональный путь 20 лет от преподавателя до предпринимателя"
+    "• Основатель компании «Высшая Траектория».\n"
+    "• Спикер Всемирного Бизнес-форума 2025 который внесен в книгу Рекордов Страны и Мира.\n"
+    "• Победитель в номинации «HR эксперт года» «Лидеры Эпохи 2024».\n"
+    "• Член Академии социальных технологий и Российского общества «Знание».\n"
     "• 10+ лет управленческого опыта на позиции HRD.\n"
     "• Автор 26 статей в научных журналах и СМИ.\n"
     "• 250+ часов индивидуального и командного коучинга.\n\n"
